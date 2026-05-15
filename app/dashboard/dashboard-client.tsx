@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import BayWelLogo from "../components/baywel-logo";
 
 type SavedReflection = {
   id: string;
@@ -49,9 +50,10 @@ export default function DashboardClient() {
         <nav className="flex items-center justify-between text-sm">
           <Link
             href="/"
-            className="font-semibold tracking-[0.14em] text-[var(--leaf)] uppercase"
+            className="inline-flex transition hover:opacity-75"
+            aria-label="BayWel registered trademark home"
           >
-            BayWel
+            <BayWelLogo />
           </Link>
           <Link href="/r/mindful-work/mw-017" className="text-[var(--muted)]">
             Sample card

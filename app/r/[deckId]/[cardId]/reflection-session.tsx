@@ -2,10 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import BayWelLogo from "../../../components/baywel-logo";
 import {
+  createInitialReflectionHintCache,
   createSavedReflection,
   identifyReflectionThemes,
+  refreshReflectionHintCache,
+  selectCachedReflectionHint,
   summarizeReflection,
+  type ReflectionHintIdea,
+  type ReflectionHintCache,
   type SavedReflection
 } from "../../../../lib/reflection-insights";
 
@@ -16,6 +22,28 @@ type ReflectionSessionProps = {
   prompt: string;
 };
 
+type MemoryOptions = {
+  saveReflections: boolean;
+  personalization: boolean;
+  anonymizedInsights: boolean;
+};
+
+const defaultMemoryOptions: MemoryOptions = {
+  saveReflections: true,
+  personalization: true,
+  anonymizedInsights: false
+};
+
+function createHintCacheKey(prompt: string) {
+  let hash = 0;
+
+  for (let index = 0; index < prompt.length; index += 1) {
+    hash = (hash * 31 + prompt.charCodeAt(index)) >>> 0;
+  }
+
+  return `baywel-reflection-hints:v1:${hash.toString(16)}`;
+}
+
 export default function ReflectionSession({
   deckId,
   cardId,
@@ -25,7 +53,11 @@ export default function ReflectionSession({
   const [reflection, setReflection] = useState("");
   const [saved, setSaved] = useState(false);
   const [memoryEnabled, setMemoryEnabled] = useState(false);
+  const [memoryOptions, setMemoryOptions] =
+    useState<MemoryOptions>(defaultMemoryOptions);
   const [sessionCount, setSessionCount] = useState(1);
+  const [cachedHint, setCachedHint] = useState<ReflectionHintIdea | null>(null);
+  const [showMemoryOptions, setShowMemoryOptions] = useState(false);
 
   useEffect(() => {
     const countKey = "baywel-session-count";
@@ -33,18 +65,57 @@ export default function ReflectionSession({
     localStorage.setItem(countKey, String(nextCount));
     setSessionCount(nextCount);
     setMemoryEnabled(localStorage.getItem("baywel-memory-enabled") === "true");
+    setMemoryOptions(
+      JSON.parse(
+        localStorage.getItem("baywel-memory-options") ??
+          JSON.stringify(defaultMemoryOptions)
+      ) as MemoryOptions
+    );
   }, []);
 
+  useEffect(() => {
+    const cacheKey = createHintCacheKey(prompt);
+    const nowIso = new Date().toISOString();
+    const storedCache = localStorage.getItem(cacheKey);
+    const parsedCache = storedCache
+      ? (JSON.parse(storedCache) as ReflectionHintCache)
+      : createInitialReflectionHintCache(prompt, nowIso);
+    const refreshedCache = refreshReflectionHintCache(
+      parsedCache,
+      prompt,
+      nowIso
+    );
+    const selectedHint = selectCachedReflectionHint(refreshedCache);
+
+    localStorage.setItem(cacheKey, JSON.stringify(selectedHint.cache));
+    setCachedHint(selectedHint.idea);
+  }, [prompt]);
+
   const summary = useMemo(() => summarizeReflection(reflection), [reflection]);
-  const themes = useMemo(
-    () => identifyReflectionThemes(reflection),
-    [reflection]
-  );
+  const themes = useMemo(() => identifyReflectionThemes(reflection), [reflection]);
   const wordCount = reflection.trim().split(/\s+/).filter(Boolean).length;
   const shouldOfferMemory = sessionCount >= 2 || wordCount >= 20;
+  const hasReflection = Boolean(reflection.trim());
+  const sessionStateLabel = memoryEnabled
+    ? memoryOptions.saveReflections
+      ? "Private memory session"
+      : "Memory on, reflections unsaved"
+    : "Anonymous session";
+  const sessionStateDetail = memoryEnabled
+    ? memoryOptions.saveReflections
+      ? "Reflection summaries can be saved"
+      : "Only options are remembered"
+    : "No reflection memory is active";
+  const saveDisabledReason = !memoryEnabled
+    ? "Choose memory options to save this reflection."
+    : !memoryOptions.saveReflections
+      ? "Turn on saved reflections in memory options."
+    : hasReflection
+      ? "Ready to save."
+      : "Write a reflection to save it.";
 
   function saveReflection() {
-    if (!reflection.trim() || !memoryEnabled) {
+    if (!hasReflection || !memoryEnabled || !memoryOptions.saveReflections) {
       return;
     }
 
@@ -69,7 +140,23 @@ export default function ReflectionSession({
 
   function enableMemory() {
     localStorage.setItem("baywel-memory-enabled", "true");
+    localStorage.setItem("baywel-memory-options", JSON.stringify(memoryOptions));
     setMemoryEnabled(true);
+  }
+
+  function updateMemoryOption(option: keyof MemoryOptions) {
+    setMemoryOptions((currentOptions) => {
+      const nextOptions = {
+        ...currentOptions,
+        [option]: !currentOptions[option]
+      };
+
+      if (memoryEnabled) {
+        localStorage.setItem("baywel-memory-options", JSON.stringify(nextOptions));
+      }
+
+      return nextOptions;
+    });
   }
 
   return (
@@ -78,9 +165,10 @@ export default function ReflectionSession({
         <aside className="border border-[var(--line)] bg-[var(--paper)] p-5 sm:p-6 lg:min-h-[calc(100vh-2.5rem)]">
           <Link
             href="/"
-            className="text-sm font-semibold tracking-[0.14em] text-[var(--leaf)] uppercase"
+            className="inline-flex transition hover:opacity-75"
+            aria-label="BayWel registered trademark home"
           >
-            BayWel
+            <BayWelLogo />
           </Link>
           <div className="mt-10 border border-[var(--line)] bg-[var(--water)] p-6">
             <p className="text-xs font-semibold tracking-[0.18em] text-[var(--leaf)] uppercase">
@@ -94,9 +182,11 @@ export default function ReflectionSession({
               few private notes here. No account is required.
             </p>
           </div>
-          <div className="mt-5 grid gap-3 text-sm text-[var(--muted)]">
-            <p>Anonymous session</p>
-            <p>AI guidance stays short and non-clinical</p>
+          <div className="mt-4 ml-auto grid max-w-xs justify-items-end gap-2 text-right text-xs leading-5 text-[var(--muted)]">
+            <p className="font-semibold text-[var(--leaf)]">
+              {sessionStateLabel}
+            </p>
+            <p>{sessionStateDetail}</p>
             <p>Memory is optional and reversible</p>
           </div>
         </aside>
@@ -131,17 +221,57 @@ export default function ReflectionSession({
               <button
                 type="button"
                 onClick={saveReflection}
-                disabled={!memoryEnabled || !reflection.trim()}
+                disabled={
+                  !memoryEnabled || !hasReflection || !memoryOptions.saveReflections
+                }
+                aria-describedby="save-memory-status"
                 className="rounded-md bg-[var(--leaf)] px-5 py-3 text-sm font-semibold text-white transition enabled:hover:bg-[var(--leaf-dark)] disabled:cursor-not-allowed disabled:opacity-45"
               >
                 Save to memory
               </button>
+              {!memoryEnabled ? (
+                <button
+                  type="button"
+                  onClick={enableMemory}
+                  className="rounded-md bg-[var(--water)] px-5 py-3 text-sm font-semibold text-[var(--leaf-dark)] transition hover:bg-[#cfe3df]"
+                >
+                  Enable memory
+                </button>
+              ) : null}
               <Link
                 href="/dashboard"
                 className="rounded-md border border-[var(--line)] px-5 py-3 text-sm font-semibold text-[var(--leaf-dark)] transition hover:border-[var(--leaf)]"
               >
                 View dashboard
               </Link>
+            </div>
+            <div
+              id="save-memory-status"
+              className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--water)] px-4 py-3 text-sm leading-6 text-[var(--leaf-dark)]"
+            >
+              <p>
+                <span className="font-semibold">
+                  {memoryEnabled ? "Memory is on." : "Memory is off."}
+                </span>{" "}
+                {saveDisabledReason}
+              </p>
+              {!memoryEnabled ? (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={enableMemory}
+                    className="rounded-md bg-[var(--leaf)] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[var(--leaf-dark)]"
+                  >
+                    Turn on memory
+                  </button>
+                  <a
+                    href="#memory-options"
+                    className="rounded-md border border-[var(--leaf)] px-3 py-2 text-xs font-semibold text-[var(--leaf-dark)] transition hover:bg-[var(--paper)]"
+                  >
+                    Choose memory options
+                  </a>
+                </div>
+              ) : null}
             </div>
             {saved ? (
               <p className="mt-3 text-sm text-[var(--leaf)]">
@@ -162,59 +292,136 @@ export default function ReflectionSession({
             </div>
             <div className="border border-[var(--line)] bg-[var(--paper)] p-5">
               <p className="text-sm font-semibold text-[var(--leaf)]">
-                Insight preview
+                Reflection support
               </p>
-              {summary ? (
-                <div className="mt-3 grid gap-3">
-                  <p className="leading-7 text-[var(--muted)]">{summary}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {themes.map((theme) => (
-                      <span
-                        key={theme}
-                        className="rounded-md bg-[var(--rose)] px-3 py-1.5 text-sm text-[var(--leaf-dark)]"
-                      >
-                        {theme}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-3 leading-7 text-[var(--muted)]">
-                  A short summary and themes will appear after you write.
+              <div className="mt-3 grid gap-3 text-sm leading-6 text-[var(--muted)]">
+                <p>
+                  {cachedHint?.text ??
+                    "Take two quiet breaths before writing. Let the first answer be imperfect."}
                 </p>
-              )}
+                <p>
+                  This hint is cached for this card prompt and rotates locally,
+                  so opening the page does not need a fresh AI call.
+                </p>
+                <div className="rounded-md bg-[var(--water)] px-3 py-2 text-[var(--leaf-dark)]">
+                  Try one sentence beginning with: Right now, I notice...
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {themes.map((theme) => (
+                    <span
+                      key={theme}
+                      className="rounded-md bg-[var(--rose)] px-3 py-1.5 text-xs text-[var(--leaf-dark)]"
+                    >
+                      {theme}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
           </section>
 
           {shouldOfferMemory ? (
-            <section className="border border-[var(--line)] bg-[var(--paper)] p-5 sm:p-6">
-              <p className="text-sm font-semibold text-[var(--leaf)]">
-                Optional memory
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold text-[var(--leaf-dark)]">
-                Would you like BayWel to remember your reflections over time?
-              </h2>
-              <p className="mt-3 max-w-2xl leading-7 text-[var(--muted)]">
-                For this MVP prototype, memory is stored locally in this
-                browser. A production version will use explicit account consent,
-                deletion controls, and encrypted storage.
-              </p>
-              <div className="mt-5 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={enableMemory}
-                  className="rounded-md bg-[var(--leaf)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--leaf-dark)]"
-                >
-                  {memoryEnabled ? "Memory enabled" : "Enable memory"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => localStorage.removeItem("baywel-memory-enabled")}
-                  className="rounded-md border border-[var(--line)] px-5 py-3 text-sm font-semibold text-[var(--leaf-dark)] transition hover:border-[var(--leaf)]"
-                >
-                  Stay anonymous
-                </button>
+            <section
+              id="memory-options"
+              className="scroll-mt-5 border border-[var(--line)] bg-[var(--paper)] p-5"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--leaf)]">
+                    Optional memory
+                  </p>
+                  <h2 className="mt-1 text-xl font-semibold text-[var(--leaf-dark)]">
+                    Remember reflections over time
+                  </h2>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted)]">
+                    Store summaries and themes locally. Options stay granular
+                    and reversible.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={enableMemory}
+                    className="rounded-md bg-[var(--leaf)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--leaf-dark)]"
+                  >
+                    {memoryEnabled ? "Memory enabled" : "Enable memory"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      localStorage.removeItem("baywel-memory-enabled");
+                      localStorage.removeItem("baywel-memory-options");
+                      setMemoryEnabled(false);
+                      setMemoryOptions(defaultMemoryOptions);
+                    }}
+                    className="rounded-md border border-[var(--line)] px-5 py-3 text-sm font-semibold text-[var(--leaf-dark)] transition hover:border-[var(--leaf)]"
+                  >
+                    Stay anonymous
+                  </button>
+                  <button
+                    type="button"
+                    aria-expanded={showMemoryOptions}
+                    onClick={() => setShowMemoryOptions((isOpen) => !isOpen)}
+                    className="rounded-md border border-[var(--line)] px-5 py-3 text-sm font-semibold text-[var(--leaf-dark)] transition hover:border-[var(--leaf)]"
+                  >
+                    {showMemoryOptions ? "Hide options" : "Show options"}
+                  </button>
+                </div>
               </div>
+              {showMemoryOptions ? (
+                <div className="mt-5 grid gap-3">
+                  <label className="flex items-start gap-3 rounded-md border border-[var(--line)] bg-white p-4">
+                    <input
+                      type="checkbox"
+                      checked={memoryOptions.saveReflections}
+                      onChange={() => updateMemoryOption("saveReflections")}
+                      className="mt-1 h-4 w-4 accent-[var(--leaf)]"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-[var(--leaf-dark)]">
+                        Save reflections
+                      </span>
+                      <span className="mt-1 block text-sm leading-6 text-[var(--muted)]">
+                        Store reflection summaries and themes in this browser.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-3 rounded-md border border-[var(--line)] bg-white p-4">
+                    <input
+                      type="checkbox"
+                      checked={memoryOptions.personalization}
+                      onChange={() => updateMemoryOption("personalization")}
+                      className="mt-1 h-4 w-4 accent-[var(--leaf)]"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-[var(--leaf-dark)]">
+                        Personalize prompts
+                      </span>
+                      <span className="mt-1 block text-sm leading-6 text-[var(--muted)]">
+                        Use saved themes to make future reflection prompts more
+                        relevant.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-3 rounded-md border border-[var(--line)] bg-white p-4">
+                    <input
+                      type="checkbox"
+                      checked={memoryOptions.anonymizedInsights}
+                      onChange={() => updateMemoryOption("anonymizedInsights")}
+                      className="mt-1 h-4 w-4 accent-[var(--leaf)]"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-[var(--leaf-dark)]">
+                        Share anonymized product insights
+                      </span>
+                      <span className="mt-1 block text-sm leading-6 text-[var(--muted)]">
+                        Help improve card resonance without sharing your raw
+                        reflection.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              ) : null}
             </section>
           ) : null}
         </div>

@@ -1,13 +1,12 @@
 import Link from "next/link";
+import BayWelLogo from "./components/baywel-logo";
 
 export default function Home() {
   return (
     <main className="min-h-screen px-5 py-6 sm:px-8">
       <section className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-5xl flex-col justify-between gap-12 rounded-none">
         <nav className="flex items-center justify-between text-sm text-[var(--muted)]">
-          <span className="font-semibold tracking-[0.14em] text-[var(--leaf-dark)] uppercase">
-            BayWel
-          </span>
+          <BayWelLogo />
           <Link href="/dashboard" className="hover:text-[var(--leaf-dark)]">
             Dashboard
           </Link>
@@ -18,9 +17,8 @@ export default function Home() {
             <p className="mb-4 text-sm font-semibold text-[var(--leaf)]">
               Physical cards first. Digital reflection when it helps.
             </p>
-            <h1 className="max-w-3xl text-5xl leading-[1.02] font-semibold text-[var(--leaf-dark)] sm:text-7xl">
-              BayWel
-            </h1>
+            <h1 className="sr-only">BayWel®</h1>
+            <BayWelLogo imageClassName="h-28 w-28 sm:h-40 sm:w-40" />
             <p className="mt-6 max-w-xl text-lg leading-8 text-[var(--muted)]">
               A mobile companion for tactile mindfulness cards, built for quiet
               reflection, optional AI guidance, and user-owned memory.

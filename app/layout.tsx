@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BayWel",
+  title: "BayWel®",
   description: "A calm companion for physical mindfulness cards."
 };
 
