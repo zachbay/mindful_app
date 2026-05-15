@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f4ef;
+  --foreground: #24322d;
+  --muted: #67736b;
+  --line: #dcd4c7;
+  --leaf: #37614f;
+  --leaf-dark: #243f35;
+  --water: #dcecea;
+  --rose: #e9d2c6;
+  --paper: #fffdf8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  margin: 0;
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+textarea,
+input {
+  font: inherit;
+}
+
+button:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 3px solid rgba(55, 97, 79, 0.35);
+  outline-offset: 3px;
+}
+
+.soft-shadow {
+  box-shadow: 0 18px 50px rgba(36, 50, 45, 0.08);
+}
