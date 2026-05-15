@@ -1,3 +1,11 @@
 # Architecture
 
-TODO: Document the system architecture, major components, data flow, and key technical decisions.
+Include:
+
+QR flow
+anonymous sessions
+consent model
+reflection pipeline
+AI memory layer
+analytics model
+privacy separation
