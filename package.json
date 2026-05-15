@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "tsc lib/reflection-insights.ts --outDir dist-test --module nodenext --moduleResolution nodenext --target es2022 --declaration false --skipLibCheck && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "next": "16.2.6",

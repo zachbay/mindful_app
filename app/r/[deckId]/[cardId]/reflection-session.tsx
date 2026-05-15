@@ -2,6 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import {
+  createSavedReflection,
+  identifyReflectionThemes,
+  summarizeReflection,
+  type SavedReflection
+} from "../../../../lib/reflection-insights";
 
 type ReflectionSessionProps = {
   deckId: string;
@@ -9,46 +15,6 @@ type ReflectionSessionProps = {
   deckName: string;
   prompt: string;
 };
-
-type SavedReflection = {
-  id: string;
-  deckId: string;
-  cardId: string;
-  prompt: string;
-  text: string;
-  summary: string;
-  themes: string[];
-  createdAt: string;
-};
-
-const themeKeywords = [
-  { theme: "Boundaries", words: ["boundary", "boundaries", "no", "space"] },
-  { theme: "Pressure", words: ["pressure", "stress", "heavy", "overwhelmed"] },
-  { theme: "Presence", words: ["present", "attention", "focus", "now"] },
-  { theme: "Rest", words: ["rest", "tired", "sleep", "pause"] },
-  { theme: "Connection", words: ["friend", "family", "partner", "together"] }
-];
-
-function summarize(text: string) {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  const firstSentence = trimmed.split(/[.!?]/).find(Boolean)?.trim() ?? trimmed;
-  return firstSentence.length > 150
-    ? `${firstSentence.slice(0, 147).trim()}...`
-    : firstSentence;
-}
-
-function identifyThemes(text: string) {
-  const lower = text.toLowerCase();
-  const matches = themeKeywords
-    .filter(({ words }) => words.some((word) => lower.includes(word)))
-    .map(({ theme }) => theme);
-
-  return matches.length > 0 ? matches.slice(0, 3) : ["Reflection"];
-}
 
 export default function ReflectionSession({
   deckId,
@@ -69,8 +35,11 @@ export default function ReflectionSession({
     setMemoryEnabled(localStorage.getItem("baywel-memory-enabled") === "true");
   }, []);
 
-  const summary = useMemo(() => summarize(reflection), [reflection]);
-  const themes = useMemo(() => identifyThemes(reflection), [reflection]);
+  const summary = useMemo(() => summarizeReflection(reflection), [reflection]);
+  const themes = useMemo(
+    () => identifyReflectionThemes(reflection),
+    [reflection]
+  );
   const wordCount = reflection.trim().split(/\s+/).filter(Boolean).length;
   const shouldOfferMemory = sessionCount >= 2 || wordCount >= 20;
 
@@ -82,16 +51,14 @@ export default function ReflectionSession({
     const existing = JSON.parse(
       localStorage.getItem("baywel-reflections") ?? "[]"
     ) as SavedReflection[];
-    const entry: SavedReflection = {
+    const entry = createSavedReflection({
       id: crypto.randomUUID(),
       deckId,
       cardId,
       prompt,
       text: reflection.trim(),
-      summary,
-      themes,
       createdAt: new Date().toISOString()
-    };
+    });
 
     localStorage.setItem(
       "baywel-reflections",
