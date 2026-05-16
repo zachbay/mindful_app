@@ -6,11 +6,13 @@ import type { ReflectionCard } from "../../../lib/decks";
 
 type DesktopCardSelectorProps = {
   cards: ReflectionCard[];
+  campaignQuery?: string;
   deckId: string;
 };
 
 export default function DesktopCardSelector({
   cards,
+  campaignQuery = "",
   deckId
 }: DesktopCardSelectorProps) {
   const [query, setQuery] = useState("");
@@ -47,7 +49,7 @@ export default function DesktopCardSelector({
           filteredCards.map((card) => (
             <Link
               key={card.cardId}
-              href={`/r/${deckId}/${card.cardId}`}
+              href={`/r/${deckId}/${card.cardId}${campaignQuery}`}
               className="rounded-md border border-[var(--line)] bg-white p-4 transition hover:border-[var(--leaf)] hover:bg-[var(--water)]"
             >
               <p className="text-xs font-semibold tracking-[0.16em] text-[var(--leaf)] uppercase">

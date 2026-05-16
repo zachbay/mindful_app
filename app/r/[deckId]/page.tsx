@@ -2,13 +2,17 @@ import Link from "next/link";
 import BayWelLogo from "../../components/baywel-logo";
 import { formatDeckName, getDeckCards } from "../../../lib/decks";
 import DesktopCardSelector from "./desktop-card-selector";
+import MobileCardScanner from "./mobile-card-scanner";
 
 export default async function DeckRoute({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ deckId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { deckId } = await params;
+  const campaignQuery = buildCampaignQuery(await searchParams);
   const deckName = formatDeckName(deckId);
   const cards = getDeckCards(deckId);
 
@@ -31,13 +35,34 @@ export default async function DeckRoute({
               Select the card in front of you.
             </h1>
             <p className="mt-8 text-sm leading-6 text-[var(--muted)]">
-              This deck QR opens the desktop selection flow. Type the card ID or
-              a few words from the prompt, then continue into reflection.
+              This deck QR opens the right flow for your device. Mobile can scan
+              the current card; desktop can search the deck.
             </p>
           </div>
         </aside>
 
-        <section className="border border-[var(--line)] bg-[var(--paper)] p-5 sm:p-6">
+        <section className="border border-[var(--line)] bg-[var(--paper)] p-5 sm:p-6 lg:hidden">
+          <p className="text-sm font-semibold text-[var(--leaf)]">
+            Mobile card scan
+          </p>
+          <h2 className="mt-1 text-2xl font-semibold text-[var(--leaf-dark)]">
+            Scan the card you are holding.
+          </h2>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+            Use the camera to read the card marker and load the prompt
+            reflection page. You can enter the card ID if scanning is
+            unavailable.
+          </p>
+          <div className="mt-6">
+            <MobileCardScanner
+              campaignQuery={campaignQuery}
+              cards={cards}
+              deckId={deckId}
+            />
+          </div>
+        </section>
+
+        <section className="hidden border border-[var(--line)] bg-[var(--paper)] p-5 sm:p-6 lg:block">
           <p className="text-sm font-semibold text-[var(--leaf)]">
             Desktop card selection
           </p>
@@ -49,10 +74,37 @@ export default async function DeckRoute({
             prompt reflection page.
           </p>
           <div className="mt-6">
-            <DesktopCardSelector cards={cards} deckId={deckId} />
+            <DesktopCardSelector
+              campaignQuery={campaignQuery}
+              cards={cards}
+              deckId={deckId}
+            />
           </div>
         </section>
       </section>
     </main>
   );
+}
+
+function buildCampaignQuery(
+  searchParams: Record<string, string | string[] | undefined>
+) {
+  const params = new URLSearchParams();
+
+  Object.entries(searchParams).forEach(([key, value]) => {
+    if (!value) {
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((entry) => params.append(key, entry));
+      return;
+    }
+
+    params.set(key, value);
+  });
+
+  const query = params.toString();
+
+  return query ? `?${query}` : "";
 }
