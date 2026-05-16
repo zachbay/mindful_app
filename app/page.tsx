@@ -25,10 +25,10 @@ export default function Home() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
-                href="/r/mindful-work/mw-017"
+                href="/r/mindful-work"
                 className="rounded-md bg-[var(--leaf)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--leaf-dark)]"
               >
-                Open sample card
+                Open sample deck
               </Link>
               <Link
                 href="/dashboard"
