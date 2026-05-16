@@ -4,12 +4,16 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import BayWelLogo from "../../../components/baywel-logo";
 import {
+  createContentInteraction,
   createInitialReflectionHintCache,
   createSavedReflection,
+  createSharedContentCacheKey,
   identifyReflectionThemes,
   refreshReflectionHintCache,
   selectCachedReflectionHint,
   summarizeReflection,
+  type ContentInteraction,
+  type ContentInteractionEvent,
   type ReflectionHintIdea,
   type ReflectionHintCache,
   type SavedReflection
@@ -34,16 +38,6 @@ const defaultMemoryOptions: MemoryOptions = {
   anonymizedInsights: false
 };
 
-function createHintCacheKey(prompt: string) {
-  let hash = 0;
-
-  for (let index = 0; index < prompt.length; index += 1) {
-    hash = (hash * 31 + prompt.charCodeAt(index)) >>> 0;
-  }
-
-  return `baywel-reflection-hints:v1:${hash.toString(16)}`;
-}
-
 export default function ReflectionSession({
   deckId,
   cardId,
@@ -58,6 +52,29 @@ export default function ReflectionSession({
   const [sessionCount, setSessionCount] = useState(1);
   const [cachedHint, setCachedHint] = useState<ReflectionHintIdea | null>(null);
   const [showMemoryOptions, setShowMemoryOptions] = useState(false);
+
+  function trackContentInteraction(
+    event: ContentInteractionEvent,
+    metadata?: Record<string, boolean | number | string>
+  ) {
+    const existing = JSON.parse(
+      localStorage.getItem("baywel-content-interactions") ?? "[]"
+    ) as ContentInteraction[];
+    const interaction = createContentInteraction({
+      cardId,
+      contentId: cachedHint?.id,
+      deckId,
+      event,
+      metadata,
+      prompt,
+      nowIso: new Date().toISOString()
+    });
+
+    localStorage.setItem(
+      "baywel-content-interactions",
+      JSON.stringify([interaction, ...existing].slice(0, 250))
+    );
+  }
 
   useEffect(() => {
     const countKey = "baywel-session-count";
@@ -74,14 +91,15 @@ export default function ReflectionSession({
   }, []);
 
   useEffect(() => {
-    const cacheKey = createHintCacheKey(prompt);
+    const cacheKey = createSharedContentCacheKey({ cardId, deckId, prompt });
     const nowIso = new Date().toISOString();
     const storedCache = localStorage.getItem(cacheKey);
     const parsedCache = storedCache
       ? (JSON.parse(storedCache) as ReflectionHintCache)
-      : createInitialReflectionHintCache(prompt, nowIso);
+      : createInitialReflectionHintCache(cacheKey, prompt, nowIso);
     const refreshedCache = refreshReflectionHintCache(
       parsedCache,
+      cacheKey,
       prompt,
       nowIso
     );
@@ -89,7 +107,15 @@ export default function ReflectionSession({
 
     localStorage.setItem(cacheKey, JSON.stringify(selectedHint.cache));
     setCachedHint(selectedHint.idea);
-  }, [prompt]);
+  }, [cardId, deckId, prompt]);
+
+  useEffect(() => {
+    if (!cachedHint) {
+      return;
+    }
+
+    trackContentInteraction("hint_impression");
+  }, [cachedHint]);
 
   const summary = useMemo(() => summarizeReflection(reflection), [reflection]);
   const themes = useMemo(() => identifyReflectionThemes(reflection), [reflection]);
@@ -135,6 +161,10 @@ export default function ReflectionSession({
       "baywel-reflections",
       JSON.stringify([entry, ...existing].slice(0, 20))
     );
+    trackContentInteraction("reflection_saved", {
+      themes: entry.themes.join(","),
+      wordCount
+    });
     setSaved(true);
   }
 
@@ -142,6 +172,11 @@ export default function ReflectionSession({
     localStorage.setItem("baywel-memory-enabled", "true");
     localStorage.setItem("baywel-memory-options", JSON.stringify(memoryOptions));
     setMemoryEnabled(true);
+    trackContentInteraction("memory_enabled", {
+      anonymizedInsights: memoryOptions.anonymizedInsights,
+      personalization: memoryOptions.personalization,
+      saveReflections: memoryOptions.saveReflections
+    });
   }
 
   function updateMemoryOption(option: keyof MemoryOptions) {
@@ -154,6 +189,11 @@ export default function ReflectionSession({
       if (memoryEnabled) {
         localStorage.setItem("baywel-memory-options", JSON.stringify(nextOptions));
       }
+
+      trackContentInteraction("memory_option_changed", {
+        option,
+        value: nextOptions[option]
+      });
 
       return nextOptions;
     });
@@ -300,8 +340,9 @@ export default function ReflectionSession({
                     "Take two quiet breaths before writing. Let the first answer be imperfect."}
                 </p>
                 <p>
-                  This hint is cached for this card prompt and rotates locally,
-                  so opening the page does not need a fresh AI call.
+                  Cached shared hint. Rotates locally and refreshes every 3
+                  days, so opening the page does not need fresh generated
+                  content.
                 </p>
                 <div className="rounded-md bg-[var(--water)] px-3 py-2 text-[var(--leaf-dark)]">
                   Try one sentence beginning with: Right now, I notice...
@@ -353,6 +394,7 @@ export default function ReflectionSession({
                       localStorage.removeItem("baywel-memory-options");
                       setMemoryEnabled(false);
                       setMemoryOptions(defaultMemoryOptions);
+                      trackContentInteraction("memory_disabled");
                     }}
                     className="rounded-md border border-[var(--line)] px-5 py-3 text-sm font-semibold text-[var(--leaf-dark)] transition hover:border-[var(--leaf)]"
                   >
@@ -361,7 +403,17 @@ export default function ReflectionSession({
                   <button
                     type="button"
                     aria-expanded={showMemoryOptions}
-                    onClick={() => setShowMemoryOptions((isOpen) => !isOpen)}
+                    onClick={() => {
+                      setShowMemoryOptions((isOpen) => {
+                        const nextIsOpen = !isOpen;
+
+                        if (nextIsOpen) {
+                          trackContentInteraction("memory_options_opened");
+                        }
+
+                        return nextIsOpen;
+                      });
+                    }}
                     className="rounded-md border border-[var(--line)] px-5 py-3 text-sm font-semibold text-[var(--leaf-dark)] transition hover:border-[var(--leaf)]"
                   >
                     {showMemoryOptions ? "Hide options" : "Show options"}

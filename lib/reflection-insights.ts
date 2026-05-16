@@ -16,11 +16,34 @@ export type ReflectionHintIdea = {
 };
 
 export type ReflectionHintCache = {
+  cacheKey: string;
   prompt: string;
   ideas: ReflectionHintIdea[];
   nextIndex: number;
   lastRefreshAt: string;
   refreshCursor: number;
+};
+
+export type ReflectionHintCacheConfig = {
+  refreshIntervalMs: number;
+};
+
+export type ContentInteractionEvent =
+  | "hint_impression"
+  | "memory_enabled"
+  | "memory_disabled"
+  | "memory_options_opened"
+  | "memory_option_changed"
+  | "reflection_saved";
+
+export type ContentInteraction = {
+  cardId: string;
+  contentId?: string;
+  createdAt: string;
+  deckId: string;
+  event: ContentInteractionEvent;
+  metadata?: Record<string, boolean | number | string>;
+  promptHash: string;
 };
 
 const themeKeywords = [
@@ -31,7 +54,9 @@ const themeKeywords = [
   { theme: "Connection", words: ["friend", "family", "partner", "together"] }
 ];
 
-const weeklyRefreshMs = 7 * 24 * 60 * 60 * 1000;
+export const defaultReflectionHintCacheConfig: ReflectionHintCacheConfig = {
+  refreshIntervalMs: 3 * 24 * 60 * 60 * 1000
+};
 
 const genericReflectionIdeaTemplates = [
   (prompt: string) =>
@@ -69,40 +94,23 @@ export function identifyReflectionThemes(text: string) {
   return matches.length > 0 ? matches.slice(0, 3) : ["Reflection"];
 }
 
-export function createReflectionHints(text: string, prompt: string) {
-  const themes = identifyReflectionThemes(text);
-  const lower = text.toLowerCase();
-  const hasDraft = Boolean(text.trim());
-
-  const nextQuestion = hasDraft
-    ? lower.includes("complete") || lower.includes("finish")
-      ? "What would make this meaningful enough, even if it stays small?"
-      : lower.includes("pressure") || lower.includes("stress")
-        ? "What is one expectation you can soften before you act?"
-        : "What part of this wants your attention first?"
-    : "What is the smallest honest answer to this card?";
-
-  const groundingCue = hasDraft
-    ? "Pause for one breath and notice whether this feels heavy, light, or unclear."
-    : "Take two quiet breaths before writing. Let the first answer be imperfect.";
-
-  const nextStep = hasDraft
-    ? `Try naming one tiny next step connected to: ${prompt.toLowerCase()}`
-    : "Write one sentence beginning with: Right now, I notice...";
-
-  return {
-    groundingCue,
-    nextQuestion,
-    nextStep,
-    themes
-  };
+export function createSharedContentCacheKey(input: {
+  cardId: string;
+  deckId: string;
+  prompt: string;
+}) {
+  return `baywel-content-cache:v1:${input.deckId}:${input.cardId}:${hashText(
+    input.prompt
+  )}`;
 }
 
 export function createInitialReflectionHintCache(
+  cacheKey: string,
   prompt: string,
   nowIso: string
 ): ReflectionHintCache {
   return {
+    cacheKey,
     prompt,
     ideas: [0, 1, 2].map((templateIndex) =>
       createReflectionHintIdea(prompt, templateIndex, nowIso)
@@ -115,16 +123,18 @@ export function createInitialReflectionHintCache(
 
 export function refreshReflectionHintCache(
   cache: ReflectionHintCache,
+  cacheKey: string,
   prompt: string,
-  nowIso: string
+  nowIso: string,
+  config: ReflectionHintCacheConfig = defaultReflectionHintCacheConfig
 ): ReflectionHintCache {
-  if (cache.prompt !== prompt || cache.ideas.length !== 3) {
-    return createInitialReflectionHintCache(prompt, nowIso);
+  if (cache.cacheKey !== cacheKey || cache.prompt !== prompt || cache.ideas.length !== 3) {
+    return createInitialReflectionHintCache(cacheKey, prompt, nowIso);
   }
 
   const nowTime = Date.parse(nowIso);
   const lastRefreshTime = Date.parse(cache.lastRefreshAt);
-  if (nowTime - lastRefreshTime < weeklyRefreshMs) {
+  if (nowTime - lastRefreshTime < config.refreshIntervalMs) {
     return cache;
   }
 
@@ -161,6 +171,26 @@ export function selectCachedReflectionHint(cache: ReflectionHintCache) {
   };
 }
 
+export function createContentInteraction(input: {
+  cardId: string;
+  contentId?: string;
+  deckId: string;
+  event: ContentInteractionEvent;
+  metadata?: Record<string, boolean | number | string>;
+  prompt: string;
+  nowIso: string;
+}): ContentInteraction {
+  return {
+    cardId: input.cardId,
+    contentId: input.contentId,
+    createdAt: input.nowIso,
+    deckId: input.deckId,
+    event: input.event,
+    metadata: input.metadata,
+    promptHash: hashText(input.prompt)
+  };
+}
+
 function createReflectionHintIdea(
   prompt: string,
   templateIndex: number,
@@ -176,6 +206,16 @@ function createReflectionHintIdea(
     text: template(prompt),
     createdAt: nowIso
   };
+}
+
+function hashText(text: string) {
+  let hash = 0;
+
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) >>> 0;
+  }
+
+  return hash.toString(16);
 }
 
 export function createSavedReflection(input: {

@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  createContentInteraction,
   createInitialReflectionHintCache,
-  createReflectionHints,
   createSavedReflection,
+  createSharedContentCacheKey,
   identifyReflectionThemes,
   refreshReflectionHintCache,
   selectCachedReflectionHint,
@@ -41,21 +42,14 @@ test("creates a saved reflection for the local memory workflow", () => {
   assert.deepEqual(saved.themes, ["Boundaries"]);
 });
 
-test("creates supportive hints from a short reflection draft", () => {
-  const hints = createReflectionHints(
-    "complete something meaningful today",
-    "What would feel lighter if you gave it your full attention for two minutes?"
-  );
-
-  assert.equal(
-    hints.nextQuestion,
-    "What would make this meaningful enough, even if it stays small?"
-  );
-  assert.equal(hints.themes[0], "Reflection");
-});
-
-test("caches three prompt hints and rotates them locally", () => {
+test("caches three prompt hints and rotates shared content locally", () => {
+  const cacheKey = createSharedContentCacheKey({
+    cardId: "mw-017",
+    deckId: "mindful-work",
+    prompt: "What would feel lighter?"
+  });
   const cache = createInitialReflectionHintCache(
+    cacheKey,
     "What would feel lighter?",
     "2026-05-15T00:00:00.000Z"
   );
@@ -66,19 +60,66 @@ test("caches three prompt hints and rotates them locally", () => {
   assert.notEqual(first.idea.id, second.idea.id);
 });
 
-test("weekly hint refresh replaces the oldest cached idea", () => {
+test("three-day hint refresh replaces the oldest cached idea", () => {
+  const cacheKey = createSharedContentCacheKey({
+    cardId: "mw-017",
+    deckId: "mindful-work",
+    prompt: "What would feel lighter?"
+  });
   const cache = createInitialReflectionHintCache(
+    cacheKey,
     "What would feel lighter?",
     "2026-05-01T00:00:00.000Z"
   );
   const refreshed = refreshReflectionHintCache(
     cache,
+    cacheKey,
     "What would feel lighter?",
-    "2026-05-15T00:00:00.000Z"
+    "2026-05-04T00:00:01.000Z"
   );
 
   assert.equal(refreshed.ideas.length, 3);
   assert.equal(refreshed.ideas[0].id, "hint-3");
   assert.equal(refreshed.ideas[1].id, "hint-1");
   assert.equal(refreshed.ideas[2].id, "hint-2");
+});
+
+test("hint refresh interval is configurable", () => {
+  const cacheKey = createSharedContentCacheKey({
+    cardId: "mw-017",
+    deckId: "mindful-work",
+    prompt: "What would feel lighter?"
+  });
+  const cache = createInitialReflectionHintCache(
+    cacheKey,
+    "What would feel lighter?",
+    "2026-05-01T00:00:00.000Z"
+  );
+  const refreshed = refreshReflectionHintCache(
+    cache,
+    cacheKey,
+    "What would feel lighter?",
+    "2026-05-01T00:30:01.000Z",
+    { refreshIntervalMs: 30 * 60 * 1000 }
+  );
+
+  assert.equal(refreshed.ideas[0].id, "hint-3");
+});
+
+test("content interaction events avoid raw reflection text", () => {
+  const event = createContentInteraction({
+    cardId: "mw-017",
+    contentId: "hint-1",
+    deckId: "mindful-work",
+    event: "reflection_saved",
+    metadata: { wordCount: 5 },
+    prompt: "What would feel lighter?",
+    nowIso: "2026-05-15T00:00:00.000Z"
+  });
+
+  assert.equal(event.contentId, "hint-1");
+  assert.equal(event.event, "reflection_saved");
+  assert.equal(event.metadata.wordCount, 5);
+  assert.ok(event.promptHash);
+  assert.equal(Object.hasOwn(event, "prompt"), false);
 });
