@@ -76,6 +76,21 @@ Authentication should only appear after user value is established.
 
 # QR System
 
+Each deck contains one QR code:
+-deck ID
+- optional campaign metadata
+
+Example Route:
+`/r/mindful-work`
+
+Mobile Workflow:
+
+QR routes should load camera on mobile to read the current card
+
+Camera reads card and loads the prompt refection pages.
+-card ID
+-optional campaign metadata
+
 Each card contains:
 - deck ID
 - card ID
@@ -84,7 +99,21 @@ Each card contains:
 Example route:
 `/r/mindful-work/mw-017`
 
-QR routes should immediately load context-specific reflection pages.
+Desktop Workflow:
+
+QR loads card selection screen:
+
+User prompted to type in prompt to quickly find the card in the deck:
+
+User selects card
+
+Each card contains:
+- deck ID
+- card ID
+- optional campaign metadata
+
+Example route:
+`/r/mindful-work/mw-017`
 
 No splash screens.
 
