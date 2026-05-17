@@ -24,7 +24,9 @@ export default function DesktopCardSelector({
     }
 
     return cards.filter((card) => {
-      return `${card.cardId} ${card.prompt}`
+      return `${card.cardId} ${card.category ?? ""} ${card.prompt} ${
+        card.exampleText ?? ""
+      }`
         .toLowerCase()
         .includes(normalizedQuery);
     });
@@ -54,6 +56,7 @@ export default function DesktopCardSelector({
             >
               <p className="text-xs font-semibold tracking-[0.16em] text-[var(--leaf)] uppercase">
                 {card.cardId}
+                {card.category ? ` / ${card.category}` : ""}
               </p>
               <p className="mt-2 text-lg leading-7 font-semibold text-[var(--leaf-dark)]">
                 {card.prompt}

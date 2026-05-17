@@ -1,24 +1,16 @@
+import { mindfulWorkCards } from "./mindful-work-cards";
+
 export type ReflectionCard = {
   cardId: string;
+  cardNumber?: number;
+  category?: string;
+  exampleText?: string;
   prompt: string;
+  templateFileName?: string;
 };
 
 export const deckCards: Record<string, ReflectionCard[]> = {
-  "mindful-work": [
-    {
-      cardId: "mw-017",
-      prompt:
-        "What would feel lighter if you gave it your full attention for two minutes?"
-    },
-    {
-      cardId: "mw-031",
-      prompt: "What boundary would help you return to yourself today?"
-    },
-    {
-      cardId: "mw-044",
-      prompt: "Where are you carrying pressure that is not yours to hold?"
-    }
-  ]
+  "mindful-work": mindfulWorkCards
 };
 
 export function formatDeckName(deckId: string) {
