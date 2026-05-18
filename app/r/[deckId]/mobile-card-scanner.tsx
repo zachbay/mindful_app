@@ -4,6 +4,7 @@ import jsQR from "jsqr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { cardMatchesSearch, normalizeCardSearchText } from "../../../lib/card-search";
 import type { ReflectionCard } from "../../../lib/decks";
 
 type MobileCardScannerProps = {
@@ -42,6 +43,7 @@ export default function MobileCardScanner({
   const [imageScanError, setImageScanError] = useState<string | null>(null);
   const [imageScanMessage, setImageScanMessage] = useState<string | null>(null);
   const [lastOcrText, setLastOcrText] = useState<string | null>(null);
+  const [showFallbacks, setShowFallbacks] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -50,6 +52,9 @@ export default function MobileCardScanner({
   const manualMatch = useMemo(() => {
     return findCardMatch(cards, manualEntry);
   }, [cards, manualEntry]);
+  const showLiveCamera = cameraState === "scanning";
+  const showCameraSurface =
+    cameraState === "starting" || cameraState === "scanning";
   const getCardHref = (cardId: string) =>
     `/r/${deckId}/${cardId}${campaignQuery}`;
 
@@ -283,26 +288,24 @@ export default function MobileCardScanner({
 
   return (
     <div className="grid gap-4">
-      <div className="rounded-md border border-[var(--line)] bg-white p-4">
-        <div className="relative aspect-[4/3] overflow-hidden rounded-md border border-[var(--line)] bg-[var(--water)]">
+      <div className="grid gap-3">
+        <div
+          className={
+            showCameraSurface
+              ? "relative aspect-[4/3] overflow-hidden rounded-md border-2 border-[#28333b] bg-[#fff9d9]"
+              : "hidden"
+          }
+        >
           <video
             ref={videoRef}
             muted
             playsInline
             className="absolute inset-0 h-full w-full object-cover"
           />
-          <canvas ref={canvasRef} className="hidden" aria-hidden="true" />
-          {cameraState !== "scanning" ? (
-            <div className="absolute inset-0 grid place-items-center px-5 text-center text-sm leading-6 text-[var(--muted)]">
-              <p>
-                Take a photo of the card prompt, start the live camera, or
-                enter the card ID below.
-              </p>
-            </div>
-          ) : null}
         </div>
+        <canvas ref={canvasRef} className="hidden" aria-hidden="true" />
 
-        <div className="mt-4 flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3">
           <input
             id={imageInputId}
             type="file"
@@ -316,25 +319,17 @@ export default function MobileCardScanner({
           />
           <label
             htmlFor={imageInputId}
-            className="cursor-pointer rounded-md bg-[var(--leaf)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--leaf-dark)]"
+            className="w-full cursor-pointer rounded-md bg-[#366779] px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-[#28333b] sm:w-auto"
           >
             Take photo
           </label>
-          <button
-            type="button"
-            onClick={startCamera}
-            disabled={cameraState === "starting" || cameraState === "scanning"}
-            className="rounded-md border border-[var(--leaf)] bg-[var(--water)] px-5 py-3 text-sm font-semibold text-[var(--leaf-dark)] transition enabled:hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {cameraState === "scanning" ? "Camera on" : "Start camera"}
-          </button>
           {cameraState === "scanning" ? (
             <>
               <button
                 type="button"
                 onClick={captureCameraFrame}
                 disabled={Boolean(imageScanMessage)}
-                className="rounded-md bg-[var(--leaf)] px-5 py-3 text-sm font-semibold text-white transition enabled:hover:bg-[var(--leaf-dark)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full rounded-md bg-[#366779] px-5 py-3 text-sm font-semibold text-white transition enabled:hover:bg-[#28333b] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
                 Capture card
               </button>
@@ -344,7 +339,7 @@ export default function MobileCardScanner({
                   stopCamera();
                   setCameraState("idle");
                 }}
-                className="rounded-md border border-[var(--line)] px-5 py-3 text-sm font-semibold text-[var(--leaf-dark)]"
+                className="rounded-md border-2 border-[#28333b] px-5 py-3 text-sm font-semibold text-[#28333b]"
               >
                 Stop
               </button>
@@ -353,76 +348,100 @@ export default function MobileCardScanner({
         </div>
 
         {cameraState === "scanning" ? (
-          <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+          <p className="mt-3 text-sm leading-6 text-[#46545a]">
             Hold the prompt text in view, then tap Capture card.
           </p>
         ) : null}
         {cameraState === "secure-required" ? (
-          <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+          <p className="mt-3 text-sm leading-6 text-[#46545a]">
             Camera access needs a secure connection. Open this page over HTTPS,
             or use the card ID field below while testing locally.
           </p>
         ) : null}
         {cameraState === "unsupported" ? (
-          <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+          <p className="mt-3 text-sm leading-6 text-[#46545a]">
             Camera scanning is not available in this browser. Enter the card ID
             instead.
           </p>
         ) : null}
         {cameraState === "blocked" ? (
-          <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+          <p className="mt-3 text-sm leading-6 text-[#46545a]">
             Camera access was blocked. You can still enter the card ID manually.
           </p>
         ) : null}
         {imageScanError ? (
-          <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+          <p className="mt-3 text-sm leading-6 text-[#46545a]">
             {imageScanError}
           </p>
         ) : null}
         {imageScanMessage ? (
-          <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+          <p className="mt-3 text-sm leading-6 text-[#46545a]">
             {imageScanMessage}
           </p>
         ) : null}
         {lastOcrText ? (
-          <div className="mt-3 rounded-md border border-[var(--line)] bg-[var(--paper)] p-3 text-xs leading-5 text-[var(--muted)]">
-            <p className="font-semibold text-[var(--leaf)]">OCR read</p>
+          <div className="mt-3 rounded-md border-2 border-[#28333b] bg-[#fffdf1] p-3 text-xs leading-5 text-[#46545a]">
+            <p className="font-semibold text-[#366779]">OCR read</p>
             <p>{lastOcrText.trim().slice(0, 220)}</p>
           </div>
         ) : null}
       </div>
 
+      <section className="rounded-md border-2 border-[#28333b] bg-white p-4">
+        <button
+          type="button"
+          onClick={() => setShowFallbacks((current) => !current)}
+          aria-expanded={showFallbacks}
+          className="flex w-full items-center justify-between gap-4 text-left text-sm font-semibold text-[#28333b]"
+        >
+          <span>Other ways to find the card</span>
+          <span aria-hidden="true">{showFallbacks ? "Close" : "Open"}</span>
+        </button>
+        {showFallbacks ? (
+        <div className="mt-4 grid gap-4">
+          <button
+            type="button"
+            onClick={startCamera}
+            disabled={cameraState === "starting" || cameraState === "scanning"}
+            className="w-full rounded-md border-2 border-[#28333b] bg-[#f6d73b] px-5 py-3 text-sm font-semibold text-[#28333b] transition enabled:hover:bg-[#fff9d9] disabled:cursor-not-allowed disabled:opacity-50 sm:w-fit"
+          >
+            {cameraState === "scanning" ? "Camera on" : "Use live camera"}
+          </button>
+
+          <label className="grid gap-2">
+            <span className="text-sm font-semibold text-[#366779]">
+              Enter card ID
+            </span>
+            <input
+              value={manualEntry}
+              onChange={(event) => setManualEntry(event.target.value)}
+              placeholder="Example: mw-017"
+              className="w-full rounded-md border-2 border-[#28333b] bg-white px-4 py-3 text-[#28333b] placeholder:text-[#7a8984] focus:border-[#366779] focus:bg-[#fff9d9]"
+            />
+          </label>
+
+          {manualMatch ? (
+            <Link
+              href={getCardHref(manualMatch.cardId)}
+              className="rounded-md border-2 border-[#28333b] bg-[#f6d73b] p-4 transition hover:bg-[#fff9d9]"
+            >
+              <p className="text-xs font-semibold tracking-[0.16em] text-[#366779] uppercase">
+                {manualMatch.cardId}
+                {manualMatch.category ? ` / ${manualMatch.category}` : ""}
+              </p>
+              <p className="mt-2 text-lg leading-7 font-semibold text-[#28333b]">
+                {manualMatch.prompt}
+              </p>
+            </Link>
+          ) : null}
+        </div>
+        ) : null}
+      </section>
+
       {detectedCardId ? (
-        <p className="rounded-md bg-[var(--water)] px-4 py-3 text-sm font-semibold text-[var(--leaf-dark)]">
+        <p className="rounded-md bg-[#f6d73b] px-4 py-3 text-sm font-semibold text-[#28333b]">
           Card {detectedCardId} found. Opening reflection...
         </p>
-      ) : null}
-
-      <label className="grid gap-2">
-        <span className="text-sm font-semibold text-[var(--leaf)]">
-          Enter card ID
-        </span>
-        <input
-          value={manualEntry}
-          onChange={(event) => setManualEntry(event.target.value)}
-          placeholder="Example: mw-017"
-          className="w-full rounded-md border border-[var(--line)] bg-white px-4 py-3 text-[var(--foreground)] placeholder:text-[#8b958e]"
-        />
-      </label>
-
-      {manualMatch ? (
-        <Link
-          href={getCardHref(manualMatch.cardId)}
-          className="rounded-md border border-[var(--leaf)] bg-[var(--water)] p-4 transition hover:bg-white"
-        >
-          <p className="text-xs font-semibold tracking-[0.16em] text-[var(--leaf)] uppercase">
-            {manualMatch.cardId}
-            {manualMatch.category ? ` / ${manualMatch.category}` : ""}
-          </p>
-          <p className="mt-2 text-lg leading-7 font-semibold text-[var(--leaf-dark)]">
-            {manualMatch.prompt}
-          </p>
-        </Link>
       ) : null}
     </div>
   );
@@ -754,15 +773,20 @@ function canvasToJpegBlob(canvas: HTMLCanvasElement) {
 }
 
 function findCardMatch(cards: ReflectionCard[], value: string) {
-  const normalizedValue = value.trim().toLowerCase();
+  const normalizedValue = normalizeCardSearchText(value);
 
   if (!normalizedValue) {
     return null;
   }
 
   return (
-    cards.find((card) => card.cardId.toLowerCase() === normalizedValue) ??
-    cards.find((card) => card.cardId.toLowerCase().includes(normalizedValue)) ??
+    cards.find(
+      (card) => normalizeCardSearchText(card.cardId) === normalizedValue
+    ) ??
+    cards.find((card) =>
+      normalizeCardSearchText(card.cardId).includes(normalizedValue)
+    ) ??
+    cards.find((card) => cardMatchesSearch(card, value)) ??
     null
   );
 }

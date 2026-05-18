@@ -17,9 +17,9 @@ export default async function DeckRoute({
   const cards = getDeckCards(deckId);
 
   return (
-    <main className="min-h-screen bg-[var(--background)] px-4 py-5 sm:px-6">
-      <section className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[0.85fr_1.15fr]">
-        <aside className="border border-[var(--line)] bg-[var(--paper)] p-5 sm:p-6 lg:min-h-[calc(100vh-2.5rem)]">
+    <main className="min-h-screen bg-[#fffdf1] px-4 py-5 text-[#28333b] sm:px-6 lg:py-8">
+      <section className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[0.82fr_1.18fr]">
+        <aside className="border-2 border-[#28333b] bg-[#fffdf1] p-5 sm:p-6">
           <Link
             href="/"
             className="inline-flex transition hover:opacity-75"
@@ -27,31 +27,42 @@ export default async function DeckRoute({
           >
             <BayWelLogo />
           </Link>
-          <div className="mt-10 border border-[var(--line)] bg-[var(--water)] p-6">
-            <p className="text-xs font-semibold tracking-[0.18em] text-[var(--leaf)] uppercase">
-              {deckName}
+          <div className="mt-10 rounded-[22px] border-2 border-[#28333b] bg-[#dc8b3a] p-4">
+            <div className="flex min-h-[340px] flex-col rounded-[18px] border-2 border-[#28333b] bg-[#fffdf1] px-5 py-6 text-center">
+              <p className="text-xs font-semibold tracking-[0.18em] text-[#28333b] uppercase">
+                Deck scanned
+              </p>
+              <div className="flex flex-1 items-center justify-center">
+                <h1 className="text-4xl leading-tight font-normal text-[#28333b] sm:text-5xl">
+                  {deckName}
+                </h1>
+              </div>
+              <div className="mx-auto flex w-full max-w-xs items-center gap-3 text-[#28333b]">
+                <span className="h-0.5 flex-1 bg-[#dc8b3a]" />
+                <p className="text-lg leading-none">Ready</p>
+                <span className="h-0.5 flex-1 bg-[#dc8b3a]" />
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 text-sm leading-6 text-[#46545a]">
+            <p>
+              <span className="font-semibold text-[#28333b]">Next:</span> find
+              the exact physical card you are holding.
             </p>
-            <h1 className="mt-8 text-3xl leading-tight font-semibold text-[var(--leaf-dark)] sm:text-4xl">
-              Select the card in front of you.
-            </h1>
-            <p className="mt-8 text-sm leading-6 text-[var(--muted)]">
-              This deck QR opens the right flow for your device. Mobile can scan
-              the current card; desktop can search the deck.
-            </p>
+            <p>No install, no account, no setup.</p>
           </div>
         </aside>
 
-        <section className="border border-[var(--line)] bg-[var(--paper)] p-5 sm:p-6 lg:hidden">
-          <p className="text-sm font-semibold text-[var(--leaf)]">
-            Mobile card scan
+        <section className="hidden border-2 border-[#28333b] bg-[#fffdf1] p-5 sm:p-6 [@media(pointer:coarse)]:block">
+          <p className="text-sm font-semibold text-[#366779]">
+            Step 2
           </p>
-          <h2 className="mt-1 text-2xl font-semibold text-[var(--leaf-dark)]">
-            Scan the card you are holding.
+          <h2 className="mt-1 text-3xl font-semibold text-[#213b38]">
+            Take a photo of the prompt.
           </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-            Use the camera to read the card marker and load the prompt
-            reflection page. You can enter the card ID if scanning is
-            unavailable.
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[#46545a]">
+            Fill the photo with the printed question on your card. BayWel will
+            read it and open the reflection.
           </p>
           <div className="mt-6">
             <MobileCardScanner
@@ -62,16 +73,16 @@ export default async function DeckRoute({
           </div>
         </section>
 
-        <section className="hidden border border-[var(--line)] bg-[var(--paper)] p-5 sm:p-6 lg:block">
-          <p className="text-sm font-semibold text-[var(--leaf)]">
-            Desktop card selection
+        <section className="border-2 border-[#28333b] bg-[#fffdf1] p-6 [@media(pointer:coarse)]:hidden">
+          <p className="text-sm font-semibold text-[#366779]">
+            Step 2
           </p>
-          <h2 className="mt-1 text-2xl font-semibold text-[var(--leaf-dark)]">
-            Which card are you holding?
+          <h2 className="mt-1 text-3xl font-semibold text-[#213b38]">
+            Find the card prompt.
           </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-            No splash screen. Pick the matching card and BayWel will load the
-            prompt reflection page.
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[#46545a]">
+            Type any words printed on your physical card. Choose the matching
+            prompt to continue.
           </p>
           <div className="mt-6">
             <DesktopCardSelector

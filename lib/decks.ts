@@ -27,7 +27,11 @@ export function getDeckCards(deckId: string) {
 
 export function getCardPrompt(deckId: string, cardId: string) {
   return (
-    getDeckCards(deckId).find((card) => card.cardId === cardId)?.prompt ??
+    getDeckCard(deckId, cardId)?.prompt ??
     "What feels most present for you right now, and what might it be asking for?"
   );
+}
+
+export function getDeckCard(deckId: string, cardId: string) {
+  return getDeckCards(deckId).find((card) => card.cardId === cardId) ?? null;
 }

@@ -5,13 +5,18 @@ import { useEffect, useMemo, useState } from "react";
 import BayWelLogo from "../../../components/baywel-logo";
 import {
   createContentInteraction,
+  createAnonymousReflectionJourney,
   createInitialReflectionHintCache,
+  createLocalReflectionResponse,
   createSavedReflection,
+  createSavedReflectionJourney,
   createSharedContentCacheKey,
   identifyReflectionThemes,
   refreshReflectionHintCache,
+  recordAnonymousReflectionCompletion,
   selectCachedReflectionHint,
   summarizeReflection,
+  type AnonymousReflectionJourney,
   type ContentInteraction,
   type ContentInteractionEvent,
   type ReflectionHintIdea,
@@ -20,9 +25,12 @@ import {
 } from "../../../../lib/reflection-insights";
 
 type ReflectionSessionProps = {
+  category?: string;
   deckId: string;
   cardId: string;
   deckName: string;
+  loginHref: string;
+  lookupHref: string;
   prompt: string;
 };
 
@@ -38,20 +46,39 @@ const defaultMemoryOptions: MemoryOptions = {
   anonymizedInsights: false
 };
 
+const anonymousJourneyKey = "baywel-anonymous-reflection-journey";
+
+function createReflectionDraftKey(deckId: string, cardId: string) {
+  return `baywel-reflection-draft:${deckId}:${cardId}`;
+}
+
+function createReflectionMemoryKey(deckId: string, cardId: string) {
+  return `baywel-reflection-memory-entry:${deckId}:${cardId}`;
+}
+
 export default function ReflectionSession({
+  category,
   deckId,
   cardId,
   deckName,
+  loginHref,
+  lookupHref,
   prompt
 }: ReflectionSessionProps) {
   const [reflection, setReflection] = useState("");
-  const [saved, setSaved] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [memorySaveLabel, setMemorySaveLabel] = useState<string | null>(null);
   const [memoryEnabled, setMemoryEnabled] = useState(false);
   const [memoryOptions, setMemoryOptions] =
     useState<MemoryOptions>(defaultMemoryOptions);
   const [sessionCount, setSessionCount] = useState(1);
   const [cachedHint, setCachedHint] = useState<ReflectionHintIdea | null>(null);
   const [showMemoryOptions, setShowMemoryOptions] = useState(false);
+  const [anonymousJourney, setAnonymousJourney] =
+    useState<AnonymousReflectionJourney>(createAnonymousReflectionJourney);
+  const [savedJourney, setSavedJourney] = useState(() =>
+    createSavedReflectionJourney([])
+  );
 
   function trackContentInteraction(
     event: ContentInteractionEvent,
@@ -79,8 +106,12 @@ export default function ReflectionSession({
   useEffect(() => {
     const countKey = "baywel-session-count";
     const nextCount = Number(localStorage.getItem(countKey) ?? "0") + 1;
+    const draftKey = createReflectionDraftKey(deckId, cardId);
+    const savedDraft = localStorage.getItem(draftKey);
+
     localStorage.setItem(countKey, String(nextCount));
     setSessionCount(nextCount);
+    setReflection(savedDraft ?? "");
     setMemoryEnabled(localStorage.getItem("baywel-memory-enabled") === "true");
     setMemoryOptions(
       JSON.parse(
@@ -88,7 +119,19 @@ export default function ReflectionSession({
           JSON.stringify(defaultMemoryOptions)
       ) as MemoryOptions
     );
-  }, []);
+    setAnonymousJourney(
+      JSON.parse(
+        localStorage.getItem(anonymousJourneyKey) ??
+          JSON.stringify(createAnonymousReflectionJourney())
+      ) as AnonymousReflectionJourney
+    );
+    setSavedJourney(
+      createSavedReflectionJourney(
+        JSON.parse(localStorage.getItem("baywel-reflections") ?? "[]"),
+        JSON.parse(localStorage.getItem("baywel-completed-reflections") ?? "[]")
+      )
+    );
+  }, [cardId, deckId]);
 
   useEffect(() => {
     const cacheKey = createSharedContentCacheKey({ cardId, deckId, prompt });
@@ -117,11 +160,18 @@ export default function ReflectionSession({
     trackContentInteraction("hint_impression");
   }, [cachedHint]);
 
-  const summary = useMemo(() => summarizeReflection(reflection), [reflection]);
   const themes = useMemo(() => identifyReflectionThemes(reflection), [reflection]);
+  const localResponse = useMemo(
+    () => createLocalReflectionResponse(reflection),
+    [reflection]
+  );
   const wordCount = reflection.trim().split(/\s+/).filter(Boolean).length;
   const shouldOfferMemory = sessionCount >= 2 || wordCount >= 20;
   const hasReflection = Boolean(reflection.trim());
+  const anonymousCardKey = `${deckId}/${cardId}`;
+  const anonymousCardComplete =
+    anonymousJourney.completedCards.includes(anonymousCardKey);
+  const anonymousCompletedCount = anonymousJourney.completedCards.length;
   const sessionStateLabel = memoryEnabled
     ? memoryOptions.saveReflections
       ? "Private memory session"
@@ -132,50 +182,95 @@ export default function ReflectionSession({
       ? "Reflection summaries can be saved"
       : "Only options are remembered"
     : "No reflection memory is active";
-  const saveDisabledReason = !memoryEnabled
-    ? "Choose memory options to save this reflection."
-    : !memoryOptions.saveReflections
-      ? "Turn on saved reflections in memory options."
-    : hasReflection
-      ? "Ready to save."
-      : "Write a reflection to save it.";
 
-  function saveReflection() {
-    if (!hasReflection || !memoryEnabled || !memoryOptions.saveReflections) {
+  useEffect(() => {
+    const draftKey = createReflectionDraftKey(deckId, cardId);
+
+    if (!hasReflection) {
+      localStorage.removeItem(draftKey);
+      setDraftSavedAt(null);
       return;
     }
 
-    const existing = JSON.parse(
-      localStorage.getItem("baywel-reflections") ?? "[]"
-    ) as SavedReflection[];
-    const entry = createSavedReflection({
-      id: crypto.randomUUID(),
-      deckId,
+    localStorage.setItem(draftKey, reflection);
+    setDraftSavedAt("Saved in this browser");
+  }, [cardId, deckId, hasReflection, reflection]);
+
+  useEffect(() => {
+    if (!memoryEnabled || !memoryOptions.saveReflections || !hasReflection) {
+      if (!hasReflection) {
+        setMemorySaveLabel(null);
+      }
+
+      return;
+    }
+
+    const saveTimer = window.setTimeout(() => {
+      const memoryEntryKey = createReflectionMemoryKey(deckId, cardId);
+      const existing = JSON.parse(
+        localStorage.getItem("baywel-reflections") ?? "[]"
+      ) as SavedReflection[];
+      const existingId = localStorage.getItem(memoryEntryKey);
+      const previousEntry =
+        existing.find((entry) => entry.id === existingId) ??
+        existing.find(
+          (entry) =>
+            entry.deckId === deckId &&
+            entry.cardId === cardId &&
+            entry.prompt === prompt
+        );
+      const entry = createSavedReflection({
+        id: previousEntry?.id ?? crypto.randomUUID(),
+        deckId,
+        cardId,
+        prompt,
+        text: reflection.trim(),
+        createdAt: previousEntry?.createdAt ?? new Date().toISOString()
+      });
+
+      localStorage.setItem(memoryEntryKey, entry.id);
+      localStorage.setItem(
+        "baywel-reflections",
+        JSON.stringify(
+          [entry, ...existing.filter((savedEntry) => savedEntry.id !== entry.id)]
+            .slice(0, 20)
+        )
+      );
+      setSavedJourney(
+        createSavedReflectionJourney(
+          [entry, ...existing.filter((savedEntry) => savedEntry.id !== entry.id)]
+            .slice(0, 20),
+          JSON.parse(localStorage.getItem("baywel-completed-reflections") ?? "[]")
+        )
+      );
+      setMemorySaveLabel("Saved to memory");
+    }, 500);
+
+    return () => window.clearTimeout(saveTimer);
+  }, [
+    cardId,
+    deckId,
+    hasReflection,
+    memoryEnabled,
+    memoryOptions.saveReflections,
+    prompt,
+    reflection
+  ]);
+
+  function completeAnonymousReflection() {
+    const nextJourney = recordAnonymousReflectionCompletion(anonymousJourney, {
       cardId,
-      prompt,
-      text: reflection.trim(),
-      createdAt: new Date().toISOString()
+      deckId,
+      nowIso: new Date().toISOString()
     });
 
-    localStorage.setItem(
-      "baywel-reflections",
-      JSON.stringify([entry, ...existing].slice(0, 20))
-    );
+    localStorage.setItem(anonymousJourneyKey, JSON.stringify(nextJourney));
+    setAnonymousJourney(nextJourney);
     trackContentInteraction("reflection_saved", {
-      themes: entry.themes.join(","),
-      wordCount
-    });
-    setSaved(true);
-  }
-
-  function enableMemory() {
-    localStorage.setItem("baywel-memory-enabled", "true");
-    localStorage.setItem("baywel-memory-options", JSON.stringify(memoryOptions));
-    setMemoryEnabled(true);
-    trackContentInteraction("memory_enabled", {
-      anonymizedInsights: memoryOptions.anonymizedInsights,
-      personalization: memoryOptions.personalization,
-      saveReflections: memoryOptions.saveReflections
+      anonymous: true,
+      completedCount: nextJourney.completedCards.length,
+      reflectedWithText: hasReflection,
+      streakDays: nextJourney.streakDays
     });
   }
 
@@ -200,9 +295,9 @@ export default function ReflectionSession({
   }
 
   return (
-    <main className="min-h-screen bg-[var(--background)] px-4 py-5 sm:px-6">
+    <main className="min-h-screen bg-[#fffdf1] px-4 py-5 text-[#28333b] sm:px-6">
       <section className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-        <aside className="border border-[var(--line)] bg-[var(--paper)] p-5 sm:p-6 lg:min-h-[calc(100vh-2.5rem)]">
+        <aside className="border-2 border-[#28333b] bg-[#fffdf1] p-5 sm:p-6 lg:min-h-[calc(100vh-2.5rem)]">
           <Link
             href="/"
             className="inline-flex transition hover:opacity-75"
@@ -210,148 +305,221 @@ export default function ReflectionSession({
           >
             <BayWelLogo />
           </Link>
-          <div className="mt-10 border border-[var(--line)] bg-[var(--water)] p-6">
-            <p className="text-xs font-semibold tracking-[0.18em] text-[var(--leaf)] uppercase">
-              {deckName} / {cardId}
-            </p>
-            <h1 className="mt-8 text-3xl leading-tight font-semibold text-[var(--leaf-dark)] sm:text-4xl">
-              {prompt}
-            </h1>
-            <p className="mt-8 text-sm leading-6 text-[var(--muted)]">
-              You can stay with the physical card, reflect silently, or write a
-              few private notes here. No account is required.
-            </p>
+          <div className="mt-10 rounded-[22px] border-2 border-[#28333b] bg-[#dc8b3a] p-4">
+            <div className="flex min-h-[420px] flex-col rounded-[18px] border-2 border-[#28333b] bg-[#fffdf1] px-5 py-6 text-center">
+              <p className="text-xs font-semibold tracking-[0.18em] text-[#28333b] uppercase">
+                {deckName} / {cardId}
+              </p>
+              <div className="flex flex-1 items-center justify-center">
+                <h1 className="text-3xl leading-tight font-normal text-[#28333b] sm:text-4xl">
+                  {prompt}
+                </h1>
+              </div>
+              {category ? (
+                <div className="mx-auto flex w-full max-w-xs items-center gap-3 text-[#28333b]">
+                  <span className="h-0.5 flex-1 bg-[#dc8b3a]" />
+                  <p className="text-xl leading-none">{category}</p>
+                  <span className="h-0.5 flex-1 bg-[#dc8b3a]" />
+                </div>
+              ) : null}
+            </div>
           </div>
-          <div className="mt-4 ml-auto grid max-w-xs justify-items-end gap-2 text-right text-xs leading-5 text-[var(--muted)]">
-            <p className="font-semibold text-[var(--leaf)]">
+          <div className="mt-4 ml-auto grid max-w-xs justify-items-end gap-2 text-right text-xs leading-5 text-[#46545a]">
+            <p className="font-semibold text-[#28333b]">
               {sessionStateLabel}
             </p>
             <p>{sessionStateDetail}</p>
             <p>Memory is optional and reversible</p>
+            <Link
+              href={lookupHref}
+              className="mt-3 rounded-md border-2 border-[#28333b] px-4 py-2 text-sm font-semibold text-[#28333b] transition hover:bg-[#fff9d9]"
+            >
+              Find another card
+            </Link>
           </div>
         </aside>
 
         <div className="grid content-start gap-4">
-          <section className="border border-[var(--line)] bg-[var(--paper)] p-5 sm:p-6">
+          <section className="border-2 border-[#28333b] bg-[#fffdf1] p-5 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-[var(--leaf)]">
+                <p className="text-sm font-semibold text-[#366779]">
                   Reflection
                 </p>
-                <h2 className="mt-1 text-2xl font-semibold text-[var(--leaf-dark)]">
-                  What is here right now?
+                <h2 className="mt-1 text-2xl font-semibold text-[#28333b]">
+                  {prompt}
                 </h2>
               </div>
-              <span className="rounded-md bg-[var(--water)] px-3 py-2 text-sm text-[var(--leaf-dark)]">
+              <span className="rounded-md bg-[#f6d73b] px-3 py-2 text-sm text-[#28333b]">
                 {wordCount} words
               </span>
             </div>
 
             <textarea
               value={reflection}
-              onChange={(event) => {
-                setReflection(event.target.value);
-                setSaved(false);
-              }}
-              placeholder="Write a few honest sentences. Short is enough."
-              className="mt-5 min-h-56 w-full resize-y rounded-md border border-[var(--line)] bg-white px-4 py-4 leading-7 text-[var(--foreground)] placeholder:text-[#8b958e]"
+              onChange={(event) => setReflection(event.target.value)}
+              placeholder="Write a few honest sentences about this card. Short is enough."
+              className="mt-5 min-h-56 w-full resize-y rounded-md border-2 border-[#28333b] bg-white px-4 py-4 leading-7 text-[#28333b] placeholder:text-[#7a8984] focus:border-[#366779] focus:bg-[#fff9d9]"
             />
 
-            <div className="mt-4 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={saveReflection}
-                disabled={
-                  !memoryEnabled || !hasReflection || !memoryOptions.saveReflections
-                }
-                aria-describedby="save-memory-status"
-                className="rounded-md bg-[var(--leaf)] px-5 py-3 text-sm font-semibold text-white transition enabled:hover:bg-[var(--leaf-dark)] disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                Save to memory
-              </button>
-              {!memoryEnabled ? (
-                <button
-                  type="button"
-                  onClick={enableMemory}
-                  className="rounded-md bg-[var(--water)] px-5 py-3 text-sm font-semibold text-[var(--leaf-dark)] transition hover:bg-[#cfe3df]"
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm leading-6 text-[#46545a]">
+                {!hasReflection
+                  ? memoryEnabled && memoryOptions.saveReflections
+                    ? "Memory is on. Reflections will save locally as you write."
+                    : "Your words stay private in this browser."
+                  : memoryEnabled && memoryOptions.saveReflections
+                  ? memorySaveLabel ?? draftSavedAt ?? "Saving locally..."
+                  : draftSavedAt ?? "Your words stay private in this browser."}
+              </p>
+              <div className="flex flex-wrap gap-3">
+                {!memoryEnabled ? (
+                  <Link
+                    href={loginHref}
+                    className="rounded-md bg-[#f6d73b] px-5 py-3 text-sm font-semibold text-[#28333b] transition hover:bg-[#fff9d9]"
+                  >
+                    Enable memory
+                  </Link>
+                ) : null}
+                <Link
+                  href="/dashboard"
+                  className="rounded-md border-2 border-[#28333b] px-5 py-3 text-sm font-semibold text-[#28333b] transition hover:bg-[#fff9d9]"
                 >
-                  Enable memory
-                </button>
-              ) : null}
-              <Link
-                href="/dashboard"
-                className="rounded-md border border-[var(--line)] px-5 py-3 text-sm font-semibold text-[var(--leaf-dark)] transition hover:border-[var(--leaf)]"
-              >
-                View dashboard
-              </Link>
+                  View dashboard
+                </Link>
+              </div>
             </div>
-            <div
-              id="save-memory-status"
-              className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--water)] px-4 py-3 text-sm leading-6 text-[var(--leaf-dark)]"
-            >
-              <p>
-                <span className="font-semibold">
-                  {memoryEnabled ? "Memory is on." : "Memory is off."}
-                </span>{" "}
-                {saveDisabledReason}
-              </p>
-              {!memoryEnabled ? (
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={enableMemory}
-                    className="rounded-md bg-[var(--leaf)] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[var(--leaf-dark)]"
-                  >
-                    Turn on memory
-                  </button>
-                  <a
-                    href="#memory-options"
-                    className="rounded-md border border-[var(--leaf)] px-3 py-2 text-xs font-semibold text-[var(--leaf-dark)] transition hover:bg-[var(--paper)]"
-                  >
-                    Choose memory options
-                  </a>
-                </div>
-              ) : null}
-            </div>
-            {saved ? (
-              <p className="mt-3 text-sm text-[var(--leaf)]">
-                Saved locally for this MVP prototype.
-              </p>
+            {localResponse ? (
+              <div className="mt-5 rounded-md border-2 border-[#28333b] bg-[#f6d73b] p-4 text-sm leading-6 text-[#28333b]">
+                <p>{localResponse.observation}</p>
+                <p className="mt-2 font-semibold">
+                  {localResponse.nextQuestion}
+                </p>
+              </div>
             ) : null}
           </section>
 
+          {!memoryEnabled ? (
+            <section className="border-2 border-[#28333b] bg-[#fffdf1] p-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-[#366779]">
+                    Anonymous journey
+                  </p>
+                  <h2 className="mt-1 text-xl font-semibold text-[#28333b]">
+                    {anonymousCardComplete
+                      ? "Card complete"
+                      : "Complete this reflection"}
+                  </h2>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-[#46545a]">
+                    {anonymousCardComplete
+                      ? "You can leave it here or continue with another card."
+                      : "Mark the card complete when you have reflected, silently or in writing."}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-3 text-sm">
+                  <span className="rounded-md bg-[#f6d73b] px-3 py-2 text-[#28333b]">
+                    {anonymousCompletedCount}{" "}
+                    {anonymousCompletedCount === 1 ? "card" : "cards"}
+                  </span>
+                  <span className="rounded-md border-2 border-[#28333b] px-3 py-2 text-[#28333b]">
+                    {anonymousJourney.streakDays} day streak
+                  </span>
+                </div>
+              </div>
+              <div className="mt-5 flex flex-wrap gap-3">
+                {anonymousCardComplete ? (
+                  <span className="rounded-md bg-[#dc8b3a] px-5 py-3 text-sm font-semibold text-[#28333b]">
+                    Completed
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={completeAnonymousReflection}
+                    className="rounded-md bg-[#f6d73b] px-5 py-3 text-sm font-semibold text-[#28333b] transition hover:bg-[#fff9d9]"
+                  >
+                    Complete reflection
+                  </button>
+                )}
+                <Link
+                  href={lookupHref}
+                  className="rounded-md border-2 border-[#28333b] px-5 py-3 text-sm font-semibold text-[#28333b] transition hover:bg-[#fff9d9]"
+                >
+                  Try another card
+                </Link>
+              </div>
+            </section>
+          ) : (
+            <section className="border-2 border-[#28333b] bg-[#fffdf1] p-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-[#366779]">
+                    Saved journey
+                  </p>
+                  <h2 className="mt-1 text-xl font-semibold text-[#28333b]">
+                    {hasReflection
+                      ? "This reflection is part of your pattern"
+                      : "Continue your reflection journey"}
+                  </h2>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-[#46545a]">
+                    {hasReflection
+                      ? `Your next useful direction may be a ${savedJourney.suggestedCategory.toLowerCase()} card.`
+                      : "Saved reflections help BayWel surface themes, streaks, and useful next cards over time."}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-3 text-sm">
+                  <span className="rounded-md bg-[#f6d73b] px-3 py-2 text-[#28333b]">
+                    {savedJourney.savedCount} saved
+                  </span>
+                  <span className="rounded-md border-2 border-[#28333b] px-3 py-2 text-[#28333b]">
+                    {savedJourney.streakDays} day streak
+                  </span>
+                </div>
+              </div>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link
+                  href="/dashboard"
+                  className="rounded-md bg-[#f6d73b] px-5 py-3 text-sm font-semibold text-[#28333b] transition hover:bg-[#fff9d9]"
+                >
+                  View journey
+                </Link>
+                <Link
+                  href={lookupHref}
+                  className="rounded-md border-2 border-[#28333b] px-5 py-3 text-sm font-semibold text-[#28333b] transition hover:bg-[#fff9d9]"
+                >
+                  Choose next card
+                </Link>
+              </div>
+            </section>
+          )}
+
           <section className="grid gap-4 md:grid-cols-2">
-            <div className="border border-[var(--line)] bg-[var(--paper)] p-5">
-              <p className="text-sm font-semibold text-[var(--leaf)]">
+            <div className="border-2 border-[#28333b] bg-[#fffdf1] p-5">
+              <p className="text-sm font-semibold text-[#366779]">
                 Gentle prompt
               </p>
-              <p className="mt-3 leading-7 text-[var(--muted)]">
+              <p className="mt-3 leading-7 text-[#46545a]">
                 What part of this reflection feels true in your body, even if
                 you do not have words for it yet?
               </p>
             </div>
-            <div className="border border-[var(--line)] bg-[var(--paper)] p-5">
-              <p className="text-sm font-semibold text-[var(--leaf)]">
+            <div className="border-2 border-[#28333b] bg-[#fffdf1] p-5">
+              <p className="text-sm font-semibold text-[#366779]">
                 Reflection support
               </p>
-              <div className="mt-3 grid gap-3 text-sm leading-6 text-[var(--muted)]">
+              <div className="mt-3 grid gap-3 text-sm leading-6 text-[#46545a]">
                 <p>
                   {cachedHint?.text ??
                     "Take two quiet breaths before writing. Let the first answer be imperfect."}
                 </p>
-                <p>
-                  Cached shared hint. Rotates locally and refreshes every 3
-                  days, so opening the page does not need fresh generated
-                  content.
-                </p>
-                <div className="rounded-md bg-[var(--water)] px-3 py-2 text-[var(--leaf-dark)]">
+                <div className="rounded-md bg-[#f6d73b] px-3 py-2 text-[#28333b]">
                   Try one sentence beginning with: Right now, I notice...
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {themes.map((theme) => (
                     <span
                       key={theme}
-                      className="rounded-md bg-[var(--rose)] px-3 py-1.5 text-xs text-[var(--leaf-dark)]"
+                      className="rounded-md bg-[#dc8b3a] px-3 py-1.5 text-xs text-[#28333b]"
                     >
                       {theme}
                     </span>
@@ -361,32 +529,24 @@ export default function ReflectionSession({
             </div>
           </section>
 
-          {shouldOfferMemory ? (
+          {shouldOfferMemory && memoryEnabled ? (
             <section
               id="memory-options"
-              className="scroll-mt-5 border border-[var(--line)] bg-[var(--paper)] p-5"
+              className="scroll-mt-5 border-2 border-[#28333b] bg-[#fffdf1] p-5"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-semibold text-[var(--leaf)]">
-                    Optional memory
+                  <p className="text-sm font-semibold text-[#366779]">
+                    Memory
                   </p>
-                  <h2 className="mt-1 text-xl font-semibold text-[var(--leaf-dark)]">
-                    Remember reflections over time
+                  <h2 className="mt-1 text-xl font-semibold text-[#28333b]">
+                    Memory settings
                   </h2>
-                  <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted)]">
-                    Store summaries and themes locally. Options stay granular
-                    and reversible.
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-[#46545a]">
+                    Reflection summaries are saved locally in this browser.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={enableMemory}
-                    className="rounded-md bg-[var(--leaf)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--leaf-dark)]"
-                  >
-                    {memoryEnabled ? "Memory enabled" : "Enable memory"}
-                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -396,7 +556,7 @@ export default function ReflectionSession({
                       setMemoryOptions(defaultMemoryOptions);
                       trackContentInteraction("memory_disabled");
                     }}
-                    className="rounded-md border border-[var(--line)] px-5 py-3 text-sm font-semibold text-[var(--leaf-dark)] transition hover:border-[var(--leaf)]"
+                    className="rounded-md border-2 border-[#28333b] px-5 py-3 text-sm font-semibold text-[#28333b] transition hover:bg-[#fff9d9]"
                   >
                     Stay anonymous
                   </button>
@@ -414,7 +574,7 @@ export default function ReflectionSession({
                         return nextIsOpen;
                       });
                     }}
-                    className="rounded-md border border-[var(--line)] px-5 py-3 text-sm font-semibold text-[var(--leaf-dark)] transition hover:border-[var(--leaf)]"
+                    className="rounded-md border-2 border-[#28333b] px-5 py-3 text-sm font-semibold text-[#28333b] transition hover:bg-[#fff9d9]"
                   >
                     {showMemoryOptions ? "Hide options" : "Show options"}
                   </button>
@@ -422,51 +582,51 @@ export default function ReflectionSession({
               </div>
               {showMemoryOptions ? (
                 <div className="mt-5 grid gap-3">
-                  <label className="flex items-start gap-3 rounded-md border border-[var(--line)] bg-white p-4">
+                  <label className="flex items-start gap-3 rounded-md border-2 border-[#28333b] bg-white p-4">
                     <input
                       type="checkbox"
                       checked={memoryOptions.saveReflections}
                       onChange={() => updateMemoryOption("saveReflections")}
-                      className="mt-1 h-4 w-4 accent-[var(--leaf)]"
+                      className="mt-1 h-4 w-4 accent-[#366779]"
                     />
                     <span>
-                      <span className="block text-sm font-semibold text-[var(--leaf-dark)]">
+                      <span className="block text-sm font-semibold text-[#28333b]">
                         Save reflections
                       </span>
-                      <span className="mt-1 block text-sm leading-6 text-[var(--muted)]">
+                      <span className="mt-1 block text-sm leading-6 text-[#46545a]">
                         Store reflection summaries and themes in this browser.
                       </span>
                     </span>
                   </label>
-                  <label className="flex items-start gap-3 rounded-md border border-[var(--line)] bg-white p-4">
+                  <label className="flex items-start gap-3 rounded-md border-2 border-[#28333b] bg-white p-4">
                     <input
                       type="checkbox"
                       checked={memoryOptions.personalization}
                       onChange={() => updateMemoryOption("personalization")}
-                      className="mt-1 h-4 w-4 accent-[var(--leaf)]"
+                      className="mt-1 h-4 w-4 accent-[#366779]"
                     />
                     <span>
-                      <span className="block text-sm font-semibold text-[var(--leaf-dark)]">
+                      <span className="block text-sm font-semibold text-[#28333b]">
                         Personalize prompts
                       </span>
-                      <span className="mt-1 block text-sm leading-6 text-[var(--muted)]">
+                      <span className="mt-1 block text-sm leading-6 text-[#46545a]">
                         Use saved themes to make future reflection prompts more
                         relevant.
                       </span>
                     </span>
                   </label>
-                  <label className="flex items-start gap-3 rounded-md border border-[var(--line)] bg-white p-4">
+                  <label className="flex items-start gap-3 rounded-md border-2 border-[#28333b] bg-white p-4">
                     <input
                       type="checkbox"
                       checked={memoryOptions.anonymizedInsights}
                       onChange={() => updateMemoryOption("anonymizedInsights")}
-                      className="mt-1 h-4 w-4 accent-[var(--leaf)]"
+                      className="mt-1 h-4 w-4 accent-[#366779]"
                     />
                     <span>
-                      <span className="block text-sm font-semibold text-[var(--leaf-dark)]">
+                      <span className="block text-sm font-semibold text-[#28333b]">
                         Share anonymized product insights
                       </span>
-                      <span className="mt-1 block text-sm leading-6 text-[var(--muted)]">
+                      <span className="mt-1 block text-sm leading-6 text-[#46545a]">
                         Help improve card resonance without sharing your raw
                         reflection.
                       </span>

@@ -46,6 +46,27 @@ export type ContentInteraction = {
   promptHash: string;
 };
 
+export type ReflectionResponse = {
+  observation: string;
+  nextQuestion: string;
+};
+
+export type AnonymousReflectionJourney = {
+  completedCards: string[];
+  completedDays: string[];
+  streakDays: number;
+  updatedAt?: string;
+};
+
+export type SavedReflectionJourney = {
+  actionableCount: number;
+  completedActionCount: number;
+  reflectedDays: string[];
+  savedCount: number;
+  streakDays: number;
+  suggestedCategory: string;
+};
+
 const themeKeywords = [
   { theme: "Boundaries", words: ["boundary", "boundaries", "no", "space"] },
   { theme: "Pressure", words: ["pressure", "stress", "heavy", "overwhelmed"] },
@@ -92,6 +113,145 @@ export function identifyReflectionThemes(text: string) {
     .map(({ theme }) => theme);
 
   return matches.length > 0 ? matches.slice(0, 3) : ["Reflection"];
+}
+
+export function isActionableReflection(text: string) {
+  const normalized = text.trim().toLowerCase();
+
+  if (!normalized) {
+    return false;
+  }
+
+  return [
+    /\bi (can|will|need to|should|want to|am going to|plan to)\b/,
+    /\b(call|email|text|ask|thank|send|write|schedule|finish|clean|start|pause|take|share|follow up)\b/,
+    /\b(today|tomorrow|next|before|after|by)\b/
+  ].some((pattern) => pattern.test(normalized));
+}
+
+export function createAnonymousReflectionJourney(): AnonymousReflectionJourney {
+  return {
+    completedCards: [],
+    completedDays: [],
+    streakDays: 0
+  };
+}
+
+export function recordAnonymousReflectionCompletion(
+  journey: AnonymousReflectionJourney,
+  input: {
+    cardId: string;
+    deckId: string;
+    nowIso: string;
+  }
+): AnonymousReflectionJourney {
+  const completedCard = `${input.deckId}/${input.cardId}`;
+  const completedDay = input.nowIso.slice(0, 10);
+  const completedCards = Array.from(
+    new Set([completedCard, ...journey.completedCards])
+  );
+  const completedDays = Array.from(
+    new Set([completedDay, ...journey.completedDays])
+  ).sort((firstDay, secondDay) => secondDay.localeCompare(firstDay));
+
+  return {
+    completedCards,
+    completedDays,
+    streakDays: countCurrentStreak(completedDays, completedDay),
+    updatedAt: input.nowIso
+  };
+}
+
+export function createSavedReflectionJourney(
+  reflections: SavedReflection[],
+  completedReflectionIds: string[] = []
+): SavedReflectionJourney {
+  const reflectedDays = Array.from(
+    new Set(reflections.map((reflection) => reflection.createdAt.slice(0, 10)))
+  ).sort((firstDay, secondDay) => secondDay.localeCompare(firstDay));
+  const actionableReflections = reflections.filter((reflection) =>
+    isActionableReflection(reflection.text)
+  );
+  const themeCounts = new Map<string, number>();
+
+  reflections.forEach((reflection) => {
+    reflection.themes.forEach((theme) => {
+      themeCounts.set(theme, (themeCounts.get(theme) ?? 0) + 1);
+    });
+  });
+
+  const recurringTheme =
+    Array.from(themeCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ??
+    "Presence";
+
+  return {
+    actionableCount: actionableReflections.length,
+    completedActionCount: actionableReflections.filter((reflection) =>
+      completedReflectionIds.includes(reflection.id)
+    ).length,
+    reflectedDays,
+    savedCount: reflections.length,
+    streakDays:
+      reflectedDays.length > 0 ? countCurrentStreak(reflectedDays, reflectedDays[0]) : 0,
+    suggestedCategory: suggestNextCategory(recurringTheme)
+  };
+}
+
+export function createLocalReflectionResponse(text: string): ReflectionResponse | null {
+  const summary = summarizeReflection(text);
+
+  if (!summary) {
+    return null;
+  }
+
+  const themes = identifyReflectionThemes(text);
+  const primaryTheme = themes[0];
+  const nextQuestion =
+    primaryTheme === "Boundaries"
+      ? "What boundary or assumption would feel kindest to check before acting?"
+      : primaryTheme === "Pressure"
+        ? "What would feel lighter if you did not need to solve it all right now?"
+        : primaryTheme === "Connection"
+          ? "What might change if you gave this person one more moment of curiosity?"
+          : primaryTheme === "Rest"
+            ? "What would become clearer after a pause?"
+            : primaryTheme === "Presence"
+              ? "What feels most true when you stay with this for one breath?"
+              : "What is one small thing this reflection is asking you to notice?";
+
+  return {
+    observation: `You noticed: ${summary}`,
+    nextQuestion
+  };
+}
+
+function suggestNextCategory(theme: string) {
+  if (theme === "Boundaries") {
+    return "Communication";
+  }
+
+  if (theme === "Pressure" || theme === "Rest") {
+    return "Rest";
+  }
+
+  if (theme === "Connection") {
+    return "Connection";
+  }
+
+  return "Presence";
+}
+
+function countCurrentStreak(completedDays: string[], currentDay: string) {
+  const completedDaySet = new Set(completedDays);
+  let streak = 0;
+  const cursor = new Date(`${currentDay}T00:00:00.000Z`);
+
+  while (completedDaySet.has(cursor.toISOString().slice(0, 10))) {
+    streak += 1;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+
+  return streak;
 }
 
 export function createSharedContentCacheKey(input: {

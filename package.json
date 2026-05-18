@@ -8,7 +8,7 @@
     "import:cards": "node scripts/import-mindful-work-cards.mjs",
     "start": "next start",
     "lint": "tsc --noEmit",
-    "test": "tsc lib/reflection-insights.ts --outDir dist-test --module nodenext --moduleResolution nodenext --target es2022 --declaration false --skipLibCheck && node --test tests/*.test.mjs"
+    "test": "tsc lib/card-search.ts lib/reflection-insights.ts lib/security-flow.ts --outDir dist-test --module nodenext --moduleResolution nodenext --target es2022 --declaration false --skipLibCheck && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@tesseract.js-data/eng": "^1.0.0",
