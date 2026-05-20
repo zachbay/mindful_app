@@ -18,21 +18,22 @@ export default async function DeckRoute({
 
   return (
     <main className="min-h-screen bg-[#fffdf1] px-4 py-5 text-[#28333b] sm:px-6 lg:py-8">
-      <section className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[0.82fr_1.18fr]">
-        <aside className="border-2 border-[#28333b] bg-[#fffdf1] p-5 sm:p-6">
-          <Link
-            href="/"
-            className="inline-flex transition hover:opacity-75"
-            aria-label="BayWel registered trademark home"
-          >
-            <BayWelLogo />
-          </Link>
-          <div className="mt-10 rounded-[22px] border-2 border-[#28333b] bg-[#dc8b3a] p-4">
-            <div className="flex min-h-[340px] flex-col rounded-[18px] border-2 border-[#28333b] bg-[#fffdf1] px-5 py-6 text-center">
+      <section className="mx-auto max-w-6xl border-2 border-[#28333b] bg-[#fffdf1] p-5 sm:p-6">
+        <Link
+          href="/"
+          className="inline-flex transition hover:opacity-75"
+          aria-label="BayWel registered trademark home"
+        >
+          <BayWelLogo />
+        </Link>
+
+        <div className="mt-8 grid gap-6 lg:grid-cols-[0.92fr_1.08fr] lg:items-stretch">
+          <div className="rounded-[22px] border-2 border-[#28333b] bg-[#dc8b3a] p-4">
+            <div className="flex min-h-[300px] flex-col rounded-[18px] border-2 border-[#28333b] bg-[#fffdf1] px-5 py-6 text-center lg:min-h-full">
               <p className="text-xs font-semibold tracking-[0.18em] text-[#28333b] uppercase">
                 Deck scanned
               </p>
-              <div className="flex flex-1 items-center justify-center">
+              <div className="flex flex-1 items-center justify-center py-10">
                 <h1 className="text-4xl leading-tight font-normal text-[#28333b] sm:text-5xl">
                   {deckName}
                 </h1>
@@ -44,54 +45,40 @@ export default async function DeckRoute({
               </div>
             </div>
           </div>
-          <div className="mt-4 grid gap-2 text-sm leading-6 text-[#46545a]">
-            <p>
-              <span className="font-semibold text-[#28333b]">Next:</span> find
-              the exact physical card you are holding.
+
+          <div className="flex flex-col justify-center">
+            <p className="text-sm font-semibold text-[#366779]">
+              Find your exact card
             </p>
-            <p>No install, no account, no setup.</p>
-          </div>
-        </aside>
+            <h2 className="mt-1 text-3xl font-semibold text-[#213b38]">
+              Search the prompt printed on the card.
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[#46545a]">
+              You are in the right deck. Use a few words from the physical card
+              so BayWel can open the matching reflection.
+            </p>
 
-        <section className="hidden border-2 border-[#28333b] bg-[#fffdf1] p-5 sm:p-6 [@media(pointer:coarse)]:block">
-          <p className="text-sm font-semibold text-[#366779]">
-            Step 2
-          </p>
-          <h2 className="mt-1 text-3xl font-semibold text-[#213b38]">
-            Take a photo of the prompt.
-          </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-[#46545a]">
-            Fill the photo with the printed question on your card. BayWel will
-            read it and open the reflection.
-          </p>
-          <div className="mt-6">
-            <MobileCardScanner
-              campaignQuery={campaignQuery}
-              cards={cards}
-              deckId={deckId}
-            />
-          </div>
-        </section>
+            <div className="mt-6 hidden [@media(pointer:coarse)]:block">
+              <MobileCardScanner
+                campaignQuery={campaignQuery}
+                cards={cards}
+                deckId={deckId}
+              />
+            </div>
 
-        <section className="border-2 border-[#28333b] bg-[#fffdf1] p-6 [@media(pointer:coarse)]:hidden">
-          <p className="text-sm font-semibold text-[#366779]">
-            Step 2
-          </p>
-          <h2 className="mt-1 text-3xl font-semibold text-[#213b38]">
-            Find the card prompt.
-          </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-[#46545a]">
-            Type any words printed on your physical card. Choose the matching
-            prompt to continue.
-          </p>
-          <div className="mt-6">
-            <DesktopCardSelector
-              campaignQuery={campaignQuery}
-              cards={cards}
-              deckId={deckId}
-            />
+            <div className="mt-6 [@media(pointer:coarse)]:hidden">
+              <DesktopCardSelector
+                campaignQuery={campaignQuery}
+                cards={cards}
+                deckId={deckId}
+              />
+            </div>
+
+            <p className="mt-5 text-sm leading-6 text-[#46545a]">
+              No install, no account, no setup.
+            </p>
           </div>
-        </section>
+        </div>
       </section>
     </main>
   );

@@ -25,6 +25,7 @@ export default function DashboardClient() {
     []
   );
   const [memoryEnabled, setMemoryEnabled] = useState(false);
+  const [showDataControls, setShowDataControls] = useState(false);
 
   useEffect(() => {
     setMemoryEnabled(localStorage.getItem("baywel-memory-enabled") === "true");
@@ -127,6 +128,15 @@ export default function DashboardClient() {
     }
   }
 
+  function goBack() {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+
+    window.location.href = "/r/mindful-work";
+  }
+
   return (
     <main className="min-h-screen bg-[#fffdf1] px-4 py-5 text-[#28333b] sm:px-6">
       <section className="mx-auto max-w-6xl">
@@ -138,156 +148,113 @@ export default function DashboardClient() {
           >
             <BayWelLogo />
           </Link>
+          <button
+            type="button"
+            onClick={goBack}
+            className="rounded-md border-2 border-[#28333b] px-4 py-2 text-sm font-semibold text-[#28333b] transition hover:bg-[#fff9d9]"
+          >
+            Back
+          </button>
         </nav>
 
         <header className="mt-12 max-w-3xl border-2 border-[#28333b] bg-[#fffdf1] p-5 sm:p-6">
           <p className="text-sm font-semibold text-[#28333b]">
             Saved reflection insights
           </p>
-          <h1 className="mt-2 text-4xl leading-tight font-semibold text-[#28333b] sm:text-5xl">
-            A quiet place for patterns to become visible.
+          <h1 className="mt-2 text-3xl leading-tight font-semibold text-[#28333b] sm:text-4xl">
+            Your reflection log.
           </h1>
-          <p className="mt-5 text-lg leading-8 text-[#28333b]">
-            Review saved reflections, recurring themes, and the ideas that keep
-            asking for your attention.
+          <p className="mt-4 text-base leading-7 text-[#46545a]">
+            Review saved responses and the patterns worth returning to.
           </p>
         </header>
 
-        <section className="mt-8 grid gap-4 sm:grid-cols-4">
-          <div className="border-2 border-[#28333b] bg-[#fffdf1] p-5">
+        <section className="mt-6 grid gap-3 sm:grid-cols-4">
+          <div className="border border-[#d8cbbb] bg-[#fffdf1] p-4">
             <p className="text-sm text-[#46545a]">Memory</p>
-            <p className="mt-2 text-2xl font-semibold text-[#28333b]">
+            <p className="mt-1 text-xl font-semibold text-[#28333b]">
               {memoryEnabled ? "Enabled" : "Off"}
             </p>
           </div>
-          <div className="border-2 border-[#28333b] bg-[#fffdf1] p-5">
+          <div className="border border-[#d8cbbb] bg-[#fffdf1] p-4">
             <p className="text-sm text-[#46545a]">Saved reflections</p>
-            <p className="mt-2 text-2xl font-semibold text-[#28333b]">
+            <p className="mt-1 text-xl font-semibold text-[#28333b]">
               {reflections.length}
             </p>
           </div>
-          <div className="border-2 border-[#28333b] bg-[#fffdf1] p-5">
+          <div className="border border-[#d8cbbb] bg-[#fffdf1] p-4">
             <p className="text-sm text-[#46545a]">Completed responses</p>
-            <p className="mt-2 text-2xl font-semibold text-[#28333b]">
+            <p className="mt-1 text-xl font-semibold text-[#28333b]">
               {savedJourney.completedActionCount}
             </p>
           </div>
-          <div className="border-2 border-[#28333b] bg-[#fffdf1] p-5">
+          <div className="border border-[#d8cbbb] bg-[#fffdf1] p-4">
             <p className="text-sm text-[#46545a]">Reflection streak</p>
-            <p className="mt-2 text-2xl font-semibold text-[#28333b]">
+            <p className="mt-1 text-xl font-semibold text-[#28333b]">
               {savedJourney.streakDays} days
             </p>
           </div>
         </section>
 
-        <section className="mt-4 border-2 border-[#28333b] bg-[#fffdf1] p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold text-[#366779]">
-                Historical data
-              </p>
-              <p className="mt-1 text-sm leading-6 text-[#46545a]">
-                Clear saved reflections, completed responses, drafts, memory
-                settings, and local progress from this browser.
-              </p>
-            </div>
-            <div className="grid gap-3 sm:max-w-md">
-              <p className="rounded-md border-2 border-[#28333b] bg-[#f6d73b] p-3 text-sm leading-6 text-[#28333b]">
-                Are you sure? This removes all historical data from this
-                browser, including saved reflections, completed responses,
-                drafts, memory status, consent records, local sign-in state,
-                anonymous progress, cached hints, and themes.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={clearMemory}
-                  className="rounded-md bg-[#dc8b3a] px-4 py-3 text-sm font-semibold text-[#28333b] transition hover:bg-[#f0a252]"
-                >
-                  Yes, clear all history
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-4 rounded-[22px] border-2 border-[#28333b] bg-[#dc8b3a] p-4">
-          <div className="border-2 border-[#28333b] bg-[#fffdf1] p-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-[#366779]">
-                  Saved journey
-                </p>
-                <h2 className="mt-1 text-2xl font-semibold text-[#28333b]">
-                  Keep following the pattern that is emerging.
-                </h2>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-[#46545a]">
-                  {savedJourney.savedCount > 0
-                    ? `You have reflected across ${savedJourney.reflectedDays.length} day${
-                        savedJourney.reflectedDays.length === 1 ? "" : "s"
-                      }. A ${savedJourney.suggestedCategory.toLowerCase()} card may be a useful next direction.`
-                    : "Save a reflection to begin building a personal journey."}
-                </p>
-              </div>
-              <div className="grid gap-2 text-sm sm:min-w-56">
-                <div className="flex items-center justify-between border-b border-[#dc8b3a] pb-2">
-                  <span>Completed responses</span>
-                  <span className="font-semibold">
-                    {savedJourney.completedActionCount}/
-                    {savedJourney.actionableCount}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between border-b border-[#dc8b3a] pb-2">
-                  <span>Next category</span>
-                  <span className="font-semibold">
-                    {savedJourney.suggestedCategory}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="mt-5 flex flex-wrap gap-3">
+        <section className="mt-4 border border-[#d8cbbb] bg-[#fffdf1] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm leading-6 text-[#46545a]">
+              {savedJourney.savedCount > 0
+                ? `Next useful direction: ${savedJourney.suggestedCategory}.`
+                : "Save a reflection to begin seeing patterns."}
+            </p>
+            <div className="flex flex-wrap gap-3">
               <Link
                 href="/r/mindful-work"
-                className="rounded-md bg-[#f6d73b] px-5 py-3 text-sm font-semibold text-[#28333b] transition hover:bg-[#fff9d9]"
+                className="rounded-md bg-[#f6d73b] px-4 py-2.5 text-sm font-semibold text-[#28333b] transition hover:bg-[#fff9d9]"
               >
                 Choose next card
               </Link>
+              <button
+                type="button"
+                aria-expanded={showDataControls}
+                onClick={() => setShowDataControls((isOpen) => !isOpen)}
+                className="rounded-md border border-[#d8cbbb] px-4 py-2.5 text-sm font-semibold text-[#46545a] transition hover:border-[#28333b] hover:text-[#28333b]"
+              >
+                Manage data
+              </button>
             </div>
           </div>
+          {showDataControls ? (
+            <div className="mt-4 grid gap-3 border-t border-[#d8cbbb] pt-4">
+              <p className="max-w-2xl rounded-md bg-[#f6d73b] p-3 text-sm leading-6 text-[#28333b]">
+                This removes saved reflections, completed responses, drafts,
+                memory settings, consent records, cached hints, and local
+                progress from this browser.
+              </p>
+              <button
+                type="button"
+                onClick={clearMemory}
+                className="justify-self-start rounded-md bg-[#dc8b3a] px-4 py-2.5 text-sm font-semibold text-[#28333b] transition hover:bg-[#f0a252]"
+              >
+                Clear all history
+              </button>
+            </div>
+          ) : null}
         </section>
 
-        <section className="mt-4 grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
-          <div className="border-2 border-[#28333b] bg-[#fffdf1] p-5">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="text-xl font-semibold text-[#28333b]">
-                Themes
-              </h2>
-            </div>
-            <div className="mt-5 grid gap-3">
-              {themeCounts.length > 0 ? (
-                themeCounts.map(([theme, count]) => (
-                  <div
-                    key={theme}
-                    className="flex items-center justify-between border-b border-[#28333b] pb-3 text-sm"
-                  >
-                    <span className="font-semibold text-[#28333b]">
-                      {theme}
-                    </span>
-                    <span className="text-[#46545a]">{count}</span>
-                  </div>
-                ))
-              ) : (
-                <p className="leading-7 text-[#46545a]">
-                  Save a reflection to begin seeing themes.
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="border-2 border-[#28333b] bg-[#fffdf1] p-5">
+        <section className="mt-6 grid gap-4">
+          <div className="border-2 border-[#28333b] bg-[#fffdf1] p-5 sm:p-6">
             <h2 className="text-xl font-semibold text-[#28333b]">
               Reflection log
             </h2>
+            {themeCounts.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {themeCounts.slice(0, 3).map(([theme, count]) => (
+                  <span
+                    key={theme}
+                    className="rounded-md bg-[#f6d73b] px-3 py-1.5 text-sm text-[#28333b]"
+                  >
+                    {theme} {count}
+                  </span>
+                ))}
+              </div>
+            ) : null}
             <div className="mt-5 grid gap-4">
               {reflections.length > 0 ? (
                 reflections.map((reflection) => (
